@@ -3,10 +3,20 @@ node_modules/
 *.log
 logs/
 
-# Auto Claude data directory
+# Auto Claude data directory and files
 .auto-claude/
-
-# Auto Claude config/state files (local development)
+.auto-claude-*
 .auto-claude-security.json
 .auto-claude-status
 .claude_settings.json
+.worktrees/
+.security-key
+logs/security/
+
+# State persistence data (keep structure, ignore content)
+data/*
+!data/.gitkeep
+
+# Verification scripts
+verify-*.js
+VERIFICATION_GUIDE.md

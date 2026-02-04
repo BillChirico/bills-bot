@@ -19,5 +19,14 @@
   "logging": {
     "level": "info",
     "fileOutput": true
+  },
+  "permissions": {
+    "enabled": true,
+    "adminRoleId": null,
+    "usePermissions": true,
+    "allowedCommands": {
+      "ping": "everyone",
+      "config": "admin"
+    }
   }
 }
