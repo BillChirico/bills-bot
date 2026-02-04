@@ -46,7 +46,7 @@ const client = new Client({
   ],
 });
 
-// Conversation history per channel (simple in-memory store)
+// Conversation history per user (simple in-memory store)
 const conversationHistory = new Map();
 const MAX_HISTORY = 20;
 
@@ -71,22 +71,22 @@ function isSpam(content) {
 }
 
 /**
- * Get or create conversation history for a channel
+ * Get or create conversation history for a user
  */
-function getHistory(channelId) {
-  if (!conversationHistory.has(channelId)) {
-    conversationHistory.set(channelId, []);
+function getHistory(userId) {
+  if (!conversationHistory.has(userId)) {
+    conversationHistory.set(userId, []);
   }
-  return conversationHistory.get(channelId);
+  return conversationHistory.get(userId);
 }
 
 /**
  * Add message to history
  */
-function addToHistory(channelId, role, content) {
-  const history = getHistory(channelId);
+function addToHistory(userId, role, content) {
+  const history = getHistory(userId);
   history.push({ role, content });
-  
+
   // Trim old messages
   while (history.length > MAX_HISTORY) {
     history.shift();
@@ -96,8 +96,8 @@ function addToHistory(channelId, role, content) {
 /**
  * Generate AI response using OpenClaw's chat completions endpoint
  */
-async function generateResponse(channelId, userMessage, username) {
-  const history = getHistory(channelId);
+async function generateResponse(userId, userMessage, username) {
+  const history = getHistory(userId);
   
   const systemPrompt = config.ai?.systemPrompt || `You are Volvox Bot, a helpful and friendly Discord bot for the Volvox developer community. 
 You're witty, knowledgeable about programming and tech, and always eager to help.
@@ -131,11 +131,11 @@ You can use Discord markdown formatting.`;
 
     const data = await response.json();
     const reply = data.choices?.[0]?.message?.content || "I got nothing. Try again?";
-    
+
     // Update history
-    addToHistory(channelId, 'user', `${username}: ${userMessage}`);
-    addToHistory(channelId, 'assistant', reply);
-    
+    addToHistory(userId, 'user', `${username}: ${userMessage}`);
+    addToHistory(userId, 'assistant', reply);
+
     return reply;
   } catch (err) {
     console.error('OpenClaw API error:', err.message);
@@ -242,9 +242,9 @@ client.on('messageCreate', async (message) => {
       }
 
       await message.channel.sendTyping();
-      
+
       const response = await generateResponse(
-        message.channel.id,
+        message.author.id,
         cleanContent,
         message.author.username
       );
