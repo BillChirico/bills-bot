@@ -69,6 +69,12 @@ AI-powered Discord bot for the Volvox community.
     "enabled": true,
     "alertChannelId": "...",
     "autoDelete": false
+  },
+  "storage": {
+    "backend": "sqlite",  // "sqlite" or "json"
+    "path": "./data/conversations.db",  // DB file (sqlite) or directory (json)
+    "maxHistory": 50,  // max messages kept in conversation context
+    "pruneAfterDays": 30  // auto-delete messages older than N days
   }
 }
 ```
