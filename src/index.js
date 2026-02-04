@@ -275,6 +275,35 @@ client.on('messageCreate', async (message) => {
   }
 });
 
+// Handle slash commands
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  try {
+    console.log(`[INTERACTION] /${interaction.commandName} from ${interaction.user.tag}`);
+
+    // Command handling will be implemented in future subtasks
+    await interaction.reply({
+      content: 'Command system is being set up. Check back soon!',
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Interaction error:', err.message);
+
+    // Try to respond if we haven't already
+    const reply = {
+      content: 'Sorry, something went wrong with that command.',
+      ephemeral: true
+    };
+
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(reply).catch(() => {});
+    } else {
+      await interaction.reply(reply).catch(() => {});
+    }
+  }
+});
+
 // Error handling
 client.on('error', (error) => {
   console.error('Discord error:', error);
