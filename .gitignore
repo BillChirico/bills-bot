@@ -2,13 +2,14 @@ node_modules/
 .env
 *.log
 
-# Auto Claude data directory
+# Auto Claude data directory and files
 .auto-claude/
-
-# Auto Claude generated files
-.auto-claude-security.json
-.auto-claude-status
+.auto-claude-*
 .claude_settings.json
 .worktrees/
 .security-key
 logs/security/
+
+# Verification scripts
+verify-*.js
+VERIFICATION_GUIDE.md

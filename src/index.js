@@ -12,6 +12,8 @@ import { config as dotenvConfig } from 'dotenv';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { HealthMonitor } from './utils/health.js';
+import * as statusCommand from './commands/status.js';
 
 dotenvConfig();
 
@@ -45,6 +47,9 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
   ],
 });
+
+// Initialize health monitor
+const healthMonitor = HealthMonitor.getInstance();
 
 // Conversation history per channel (simple in-memory store)
 const conversationHistory = new Map();
@@ -126,19 +131,25 @@ You can use Discord markdown formatting.`;
     });
 
     if (!response.ok) {
+      healthMonitor.setAPIStatus('error');
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     const reply = data.choices?.[0]?.message?.content || "I got nothing. Try again?";
-    
+
+    // Record successful AI request
+    healthMonitor.recordAIRequest();
+    healthMonitor.setAPIStatus('ok');
+
     // Update history
     addToHistory(channelId, 'user', `${username}: ${userMessage}`);
     addToHistory(channelId, 'assistant', reply);
-    
+
     return reply;
   } catch (err) {
     console.error('OpenClaw API error:', err.message);
+    healthMonitor.setAPIStatus('error');
     return "Sorry, I'm having trouble thinking right now. Try again in a moment!";
   }
 }
@@ -175,7 +186,10 @@ async function sendSpamAlert(message) {
 client.once('ready', () => {
   console.log(`✅ ${client.user.tag} is online!`);
   console.log(`📡 Serving ${client.guilds.cache.size} server(s)`);
-  
+
+  // Record bot start time
+  healthMonitor.recordStart();
+
   if (config.welcome?.enabled) {
     console.log(`👋 Welcome messages → #${config.welcome.channelId}`);
   }
@@ -258,6 +272,41 @@ client.on('messageCreate', async (message) => {
       } else {
         await message.reply(response);
       }
+    }
+  }
+});
+
+// Handle slash commands
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  try {
+    console.log(`[INTERACTION] /${interaction.commandName} from ${interaction.user.tag}`);
+
+    // Route commands
+    switch (interaction.commandName) {
+      case 'status':
+        await statusCommand.execute(interaction);
+        break;
+      default:
+        await interaction.reply({
+          content: 'Unknown command!',
+          ephemeral: true
+        });
+    }
+  } catch (err) {
+    console.error('Interaction error:', err.message);
+
+    // Try to respond if we haven't already
+    const reply = {
+      content: 'Sorry, something went wrong with that command.',
+      ephemeral: true
+    };
+
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(reply).catch(() => {});
+    } else {
+      await interaction.reply(reply).catch(() => {});
     }
   }
 });
