@@ -3,6 +3,8 @@
  * Handles AI chat functionality powered by Claude via OpenClaw
  */
 
+import { info, warn } from '../logger.js';
+
 // Conversation history per channel (simple in-memory store)
 let conversationHistory = new Map();
 const MAX_HISTORY = 20;
@@ -79,6 +81,9 @@ You can use Discord markdown formatting.`;
     { role: 'user', content: `${username}: ${userMessage}` }
   ];
 
+  // Log incoming AI request
+  info('AI request', { channelId, username, message: userMessage });
+
   try {
     const response = await fetch(OPENCLAW_URL, {
       method: 'POST',
@@ -102,6 +107,9 @@ You can use Discord markdown formatting.`;
 
     const data = await response.json();
     const reply = data.choices?.[0]?.message?.content || "I got nothing. Try again?";
+
+    // Log AI response
+    info('AI response', { channelId, username, response: reply.substring(0, 500) });
 
     // Record successful AI request
     if (healthMonitor) {
