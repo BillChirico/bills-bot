@@ -4,8 +4,24 @@
  */
 
 // Conversation history per channel (simple in-memory store)
-const conversationHistory = new Map();
+let conversationHistory = new Map();
 const MAX_HISTORY = 20;
+
+/**
+ * Get the full conversation history map (for state persistence)
+ * @returns {Map} Conversation history map
+ */
+export function getConversationHistory() {
+  return conversationHistory;
+}
+
+/**
+ * Set the conversation history map (for state restoration)
+ * @param {Map} history - Conversation history map to restore
+ */
+export function setConversationHistory(history) {
+  conversationHistory = history;
+}
 
 // OpenClaw API endpoint
 const OPENCLAW_URL = process.env.OPENCLAW_URL || 'http://localhost:18789/v1/chat/completions';
