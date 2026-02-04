@@ -221,6 +221,13 @@ client.on('messageCreate', async (message) => {
     return;
   }
 
+  // /clear command - reset conversation history
+  if (message.content.trim().toLowerCase() === '/clear') {
+    conversationHistory.delete(message.author.id);
+    await message.reply('✅ Your conversation history has been cleared! Starting fresh.');
+    return;
+  }
+
   // AI chat - respond when mentioned
   if (config.ai?.enabled) {
     const isMentioned = message.mentions.has(client.user);
