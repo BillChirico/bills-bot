@@ -105,6 +105,11 @@ export class SQLiteStorage extends Storage {
    */
   constructor(dbPath = './data/conversations.db') {
     super();
+    // Ensure directory exists
+    const dir = join(dbPath, '..');
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL'); // Better concurrency
     this._initDatabase();
