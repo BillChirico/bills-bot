@@ -17,7 +17,7 @@ dotenvConfig();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, '..', 'config.json');
-const statePath = join(__dirname, '..', 'state.json');
+const statePath = join(__dirname, '..', 'data', 'state.json');
 
 // Load config
 let config;
@@ -330,7 +330,7 @@ async function gracefulShutdown(signal) {
   saveState();
 
   // 2. Wait for pending requests with timeout
-  const SHUTDOWN_TIMEOUT = 5000; // 5 seconds
+  const SHUTDOWN_TIMEOUT = 10000; // 10 seconds
   if (pendingRequests.size > 0) {
     console.log(`⏳ Waiting for ${pendingRequests.size} pending request(s)...`);
     const startTime = Date.now();
