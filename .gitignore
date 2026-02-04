@@ -4,3 +4,7 @@ node_modules/
 
 # Auto Claude data directory
 .auto-claude/
+
+# Storage files
+*.db
+data/
