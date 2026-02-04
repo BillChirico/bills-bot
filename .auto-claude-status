@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "009-enhanced-code-formatting-support",
+  "state": "building",
+  "subtasks": {
+    "completed": 1,
+    "total": 5,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Code Detection and Formatting",
+    "id": null,
+    "total": 3
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 3,
+    "started_at": "2026-02-03T20:34:14.947629"
+  },
+  "last_update": "2026-02-03T20:38:35.031233"
+}

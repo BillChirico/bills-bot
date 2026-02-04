@@ -71,6 +71,42 @@ function isSpam(content) {
 }
 
 /**
+ * Detect code blocks in message content
+ * Returns array of code blocks with their language and content
+ */
+function detectcode(content) {
+  const blocks = [];
+
+  // Match triple backtick code blocks with optional language
+  const tripleBacktickRegex = /```(\w+)?\n?([\s\S]*?)```/g;
+  let match;
+
+  while ((match = tripleBacktickRegex.exec(content)) !== null) {
+    blocks.push({
+      type: 'fenced',
+      language: match[1] || null,
+      content: match[2].trim(),
+      raw: match[0]
+    });
+  }
+
+  // Match inline code (single backticks) only if no fenced blocks found
+  if (blocks.length === 0) {
+    const inlineRegex = /`([^`]+)`/g;
+    while ((match = inlineRegex.exec(content)) !== null) {
+      blocks.push({
+        type: 'inline',
+        language: null,
+        content: match[1],
+        raw: match[0]
+      });
+    }
+  }
+
+  return blocks;
+}
+
+/**
  * Get or create conversation history for a channel
  */
 function getHistory(channelId) {
