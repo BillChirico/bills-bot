@@ -3,13 +3,13 @@
   "spec": "005-persistent-conversation-storage",
   "state": "building",
   "subtasks": {
-    "completed": 2,
+    "completed": 3,
     "total": 13,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Add Storage Layer",
+    "current": "Migrate to New Storage",
     "id": null,
     "total": 3
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 4,
+    "number": 5,
     "started_at": "2026-02-03T20:25:36.371830"
   },
-  "last_update": "2026-02-03T20:35:32.718503"
+  "last_update": "2026-02-03T20:37:09.520898"
 }

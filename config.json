@@ -15,5 +15,11 @@
     "enabled": true,
     "alertChannelId": "1438665401243275284",
     "autoDelete": false
+  },
+  "storage": {
+    "backend": "sqlite",
+    "path": "./data/conversations.db",
+    "maxHistory": 50,
+    "pruneAfterDays": 30
   }
 }
