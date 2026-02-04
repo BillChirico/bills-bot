@@ -53,9 +53,6 @@ const client = new Client({
   ],
 });
 
-// Max history from config (used for getHistory limit)
-const MAX_HISTORY = config.storage?.maxHistory || 20;
-
 // Spam patterns
 const SPAM_PATTERNS = [
   /free\s*(crypto|bitcoin|btc|eth|nft)/i,
@@ -80,7 +77,7 @@ function isSpam(content) {
  * Get conversation history for a channel
  */
 async function getHistory(channelId) {
-  return await storage.getHistory(channelId, MAX_HISTORY);
+  return await storage.getHistory(channelId, config.storage?.maxHistory || 20);
 }
 
 /**
