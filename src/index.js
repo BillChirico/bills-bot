@@ -9,7 +9,7 @@
 
 import { Client, GatewayIntentBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { config as dotenvConfig } from 'dotenv';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,6 +17,7 @@ dotenvConfig();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, '..', 'config.json');
+const statePath = join(__dirname, '..', 'state.json');
 
 // Load config
 let config;
@@ -86,10 +87,45 @@ function getHistory(channelId) {
 function addToHistory(channelId, role, content) {
   const history = getHistory(channelId);
   history.push({ role, content });
-  
+
   // Trim old messages
   while (history.length > MAX_HISTORY) {
     history.shift();
+  }
+}
+
+/**
+ * Save conversation history to disk
+ */
+function saveState() {
+  try {
+    const stateData = {
+      conversationHistory: Array.from(conversationHistory.entries()),
+      timestamp: new Date().toISOString(),
+    };
+    writeFileSync(statePath, JSON.stringify(stateData, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('❌ Failed to save state:', err.message);
+  }
+}
+
+/**
+ * Load conversation history from disk
+ */
+function loadState() {
+  try {
+    if (!existsSync(statePath)) {
+      return;
+    }
+    const stateData = JSON.parse(readFileSync(statePath, 'utf-8'));
+    if (stateData.conversationHistory) {
+      conversationHistory.clear();
+      for (const [channelId, history] of stateData.conversationHistory) {
+        conversationHistory.set(channelId, history);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Failed to load state:', err.message);
   }
 }
 
