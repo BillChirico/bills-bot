@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "001-health-status-command",
+  "state": "planning",
+  "subtasks": {
+    "completed": 0,
+    "total": 0,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Health Monitoring Infrastructure",
+    "id": null,
+    "total": 2
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 2,
+    "started_at": "2026-02-03T20:06:55.392664"
+  },
+  "last_update": "2026-02-03T20:10:22.961692"
+}
