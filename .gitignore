@@ -1,3 +1,10 @@
 node_modules/
 .env
 *.log
+
+# Auto Claude data directory
+.auto-claude/
+
+# State persistence data (keep structure, ignore content)
+data/*
+!data/.gitkeep
