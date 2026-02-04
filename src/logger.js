@@ -9,23 +9,40 @@
  */
 
 import winston from 'winston';
-import { readFileSync, existsSync } from 'fs';
+import DailyRotateFile from 'winston-daily-rotate-file';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, '..', 'config.json');
+const logsDir = join(__dirname, '..', 'logs');
 
-// Load config to get log level
+// Load config to get log level and file output setting
 let logLevel = 'info';
+let fileOutputEnabled = false;
+
 try {
   if (existsSync(configPath)) {
     const config = JSON.parse(readFileSync(configPath, 'utf-8'));
     logLevel = process.env.LOG_LEVEL || config.logging?.level || 'info';
+    fileOutputEnabled = config.logging?.fileOutput || false;
   }
 } catch (err) {
   // Fallback to default if config can't be loaded
   logLevel = process.env.LOG_LEVEL || 'info';
+}
+
+// Create logs directory if file output is enabled
+if (fileOutputEnabled) {
+  try {
+    if (!existsSync(logsDir)) {
+      mkdirSync(logsDir, { recursive: true });
+    }
+  } catch (err) {
+    // Log directory creation failed, but continue without file logging
+    fileOutputEnabled = false;
+  }
 }
 
 /**
@@ -48,6 +65,32 @@ const consoleFormat = winston.format.printf(({ level, message, timestamp, ...met
 /**
  * Create winston logger instance
  */
+const transports = [
+  new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+      consoleFormat
+    )
+  })
+];
+
+// Add file transport if enabled in config
+if (fileOutputEnabled) {
+  transports.push(
+    new DailyRotateFile({
+      filename: join(logsDir, 'combined-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '20m',
+      maxFiles: '14d',
+      format: winston.format.combine(
+        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        winston.format.json()
+      )
+    })
+  );
+}
+
 const logger = winston.createLogger({
   level: logLevel,
   format: winston.format.combine(
@@ -56,15 +99,7 @@ const logger = winston.createLogger({
     winston.format.splat(),
     winston.format.json()
   ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-        consoleFormat
-      )
-    })
-  ]
+  transports
 });
 
 /**
