@@ -12,7 +12,7 @@ import { config as dotenvConfig } from 'dotenv';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { info, error } from './logger.js';
+import { info, warn, error } from './logger.js';
 
 dotenvConfig();
 
@@ -202,7 +202,14 @@ client.on('guildMemberAdd', async (member) => {
       .replace(/{memberCount}/g, member.guild.memberCount.toString());
 
     await channel.send(message);
-    console.log(`[WELCOME] ${member.user.tag} joined ${member.guild.name}`);
+    info('Welcome message sent', {
+      user: member.user.tag,
+      userId: member.id,
+      guild: member.guild.name,
+      guildId: member.guild.id,
+      channel: channel.name,
+      channelId: channel.id
+    });
   } catch (err) {
     console.error('Welcome error:', err.message);
   }
@@ -216,7 +223,15 @@ client.on('messageCreate', async (message) => {
 
   // Spam detection
   if (config.moderation?.enabled && isSpam(message.content)) {
-    console.log(`[SPAM] ${message.author.tag}: ${message.content.slice(0, 50)}...`);
+    warn('Spam detected', {
+      user: message.author.tag,
+      userId: message.author.id,
+      channel: message.channel.name,
+      channelId: message.channel.id,
+      guild: message.guild.name,
+      guildId: message.guild.id,
+      contentPreview: message.content.slice(0, 50)
+    });
     await sendSpamAlert(message);
     return;
   }
