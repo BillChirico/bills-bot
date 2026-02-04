@@ -1,5 +1,6 @@
 {
   "name": "bill-bot",
+  "packageManager": "pnpm@10.28.2",
   "version": "1.0.0",
   "description": "Volvox Discord bot - AI chat, welcome messages, and moderation",
   "main": "src/index.js",
