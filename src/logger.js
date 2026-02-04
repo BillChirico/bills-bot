@@ -120,17 +120,29 @@ const redactSensitiveData = winston.format((info) => {
 })();
 
 /**
+ * Emoji mapping for log levels
+ */
+const EMOJI_MAP = {
+  error: '❌',
+  warn: '⚠️',
+  info: '✅',
+  debug: '🔍'
+};
+
+/**
+ * Format that stores the original level before colorization
+ */
+const preserveOriginalLevel = winston.format((info) => {
+  info.originalLevel = info.level;
+  return info;
+})();
+
+/**
  * Custom format for console output with emoji prefixes
  */
-const consoleFormat = winston.format.printf(({ level, message, timestamp, ...meta }) => {
-  const emoji = {
-    error: '❌',
-    warn: '⚠️',
-    info: '✅',
-    debug: '🔍'
-  };
-
-  const prefix = emoji[level] || '📝';
+const consoleFormat = winston.format.printf(({ level, message, timestamp, originalLevel, ...meta }) => {
+  // Use originalLevel for emoji lookup since 'level' may contain ANSI color codes
+  const prefix = EMOJI_MAP[originalLevel] || '📝';
   const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
 
   return `${prefix} [${timestamp}] ${level.toUpperCase()}: ${message}${metaStr}`;
@@ -143,6 +155,7 @@ const transports = [
   new winston.transports.Console({
     format: winston.format.combine(
       redactSensitiveData,
+      preserveOriginalLevel,
       winston.format.colorize(),
       winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
       consoleFormat
