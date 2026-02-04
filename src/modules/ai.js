@@ -45,9 +45,10 @@ export function addToHistory(channelId, role, content) {
  * @param {string} userMessage - User's message
  * @param {string} username - Username
  * @param {Object} config - Bot configuration
+ * @param {Object} healthMonitor - Health monitor instance (optional)
  * @returns {Promise<string>} AI response
  */
-export async function generateResponse(channelId, userMessage, username, config) {
+export async function generateResponse(channelId, userMessage, username, config, healthMonitor = null) {
   const history = getHistory(channelId);
 
   const systemPrompt = config.ai?.systemPrompt || `You are Volvox Bot, a helpful and friendly Discord bot for the Volvox developer community.
@@ -77,11 +78,20 @@ You can use Discord markdown formatting.`;
     });
 
     if (!response.ok) {
+      if (healthMonitor) {
+        healthMonitor.setAPIStatus('error');
+      }
       throw new Error(`API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     const reply = data.choices?.[0]?.message?.content || "I got nothing. Try again?";
+
+    // Record successful AI request
+    if (healthMonitor) {
+      healthMonitor.recordAIRequest();
+      healthMonitor.setAPIStatus('ok');
+    }
 
     // Update history
     addToHistory(channelId, 'user', `${username}: ${userMessage}`);
@@ -90,6 +100,9 @@ You can use Discord markdown formatting.`;
     return reply;
   } catch (err) {
     console.error('OpenClaw API error:', err.message);
+    if (healthMonitor) {
+      healthMonitor.setAPIStatus('error');
+    }
     return "Sorry, I'm having trouble thinking right now. Try again in a moment!";
   }
 }

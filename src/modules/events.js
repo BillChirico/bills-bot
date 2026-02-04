@@ -11,11 +11,17 @@ import { generateResponse } from './ai.js';
  * Register bot ready event handler
  * @param {Object} client - Discord client
  * @param {Object} config - Bot configuration
+ * @param {Object} healthMonitor - Health monitor instance
  */
-export function registerReadyHandler(client, config) {
+export function registerReadyHandler(client, config, healthMonitor) {
   client.once('ready', () => {
     console.log(`✅ ${client.user.tag} is online!`);
     console.log(`📡 Serving ${client.guilds.cache.size} server(s)`);
+
+    // Record bot start time
+    if (healthMonitor) {
+      healthMonitor.recordStart();
+    }
 
     if (config.welcome?.enabled) {
       console.log(`👋 Welcome messages → #${config.welcome.channelId}`);
@@ -44,8 +50,9 @@ export function registerGuildMemberAddHandler(client, config) {
  * Register message create event handler
  * @param {Object} client - Discord client
  * @param {Object} config - Bot configuration
+ * @param {Object} healthMonitor - Health monitor instance
  */
-export function registerMessageCreateHandler(client, config) {
+export function registerMessageCreateHandler(client, config, healthMonitor) {
   client.on('messageCreate', async (message) => {
     // Ignore bots and DMs
     if (message.author.bot) return;
@@ -84,7 +91,8 @@ export function registerMessageCreateHandler(client, config) {
           message.channel.id,
           cleanContent,
           message.author.username,
-          config
+          config,
+          healthMonitor
         );
 
         // Split long responses
@@ -119,10 +127,11 @@ export function registerErrorHandlers(client) {
  * Register all event handlers
  * @param {Object} client - Discord client
  * @param {Object} config - Bot configuration
+ * @param {Object} healthMonitor - Health monitor instance
  */
-export function registerEventHandlers(client, config) {
-  registerReadyHandler(client, config);
+export function registerEventHandlers(client, config, healthMonitor) {
+  registerReadyHandler(client, config, healthMonitor);
   registerGuildMemberAddHandler(client, config);
-  registerMessageCreateHandler(client, config);
+  registerMessageCreateHandler(client, config, healthMonitor);
   registerErrorHandlers(client);
 }
