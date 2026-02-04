@@ -114,3 +114,15 @@ export function registerErrorHandlers(client) {
     console.error('Unhandled rejection:', error);
   });
 }
+
+/**
+ * Register all event handlers
+ * @param {Object} client - Discord client
+ * @param {Object} config - Bot configuration
+ */
+export function registerEventHandlers(client, config) {
+  registerReadyHandler(client, config);
+  registerGuildMemberAddHandler(client, config);
+  registerMessageCreateHandler(client, config);
+  registerErrorHandlers(client);
+}
