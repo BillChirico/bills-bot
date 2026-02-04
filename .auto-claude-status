@@ -3,23 +3,23 @@
   "spec": "005-persistent-conversation-storage",
   "state": "building",
   "subtasks": {
-    "completed": 5,
+    "completed": 6,
     "total": 13,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Migrate to New Storage",
+    "current": "Add Pruning & Configuration",
     "id": null,
-    "total": 3
+    "total": 4
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 7,
+    "number": 8,
     "started_at": "2026-02-03T20:25:36.371830"
   },
-  "last_update": "2026-02-03T20:39:52.153599"
+  "last_update": "2026-02-03T20:41:53.288109"
 }
