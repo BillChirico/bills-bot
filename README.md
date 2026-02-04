@@ -4,15 +4,22 @@ AI-powered Discord bot for the Volvox community.
 
 ## Features
 
-- **AI Chat** - Powered by Claude, responds when mentioned
+- **AI Chat** - Powered by Claude (via OpenClaw), responds when mentioned
 - **Welcome Messages** - Greets new members in a configurable channel
 - **Moderation** - Detects spam/scam patterns and alerts mods
+
+## Requirements
+
+- Node.js 18+
+- pnpm (`npm install -g pnpm`)
+- OpenClaw gateway running (for AI chat)
 
 ## Setup
 
 1. Copy `.env.example` to `.env` and fill in:
    - `DISCORD_TOKEN` - Your Discord bot token
-   - `ANTHROPIC_API_KEY` - Your Anthropic API key
+   - `OPENCLAW_URL` - OpenClaw chat completions endpoint
+   - `OPENCLAW_TOKEN` - Your OpenClaw gateway token
 
 2. Edit `config.json` for your server:
    - Channel IDs for welcome messages and mod alerts
@@ -23,6 +30,11 @@ AI-powered Discord bot for the Volvox community.
    ```bash
    pnpm install
    pnpm start
+   ```
+
+   For development (auto-restart on changes):
+   ```bash
+   pnpm dev
    ```
 
 ## Discord Bot Setup
@@ -60,6 +72,22 @@ AI-powered Discord bot for the Volvox community.
   }
 }
 ```
+
+## Architecture
+
+```
+Discord Message
+     ↓
+  bill-bot
+     ↓
+OpenClaw API (/v1/chat/completions)
+     ↓
+Claude (via your subscription)
+     ↓
+  Response
+```
+
+The bot routes AI requests through OpenClaw's chat completions endpoint, which uses your existing Claude subscription. No separate Anthropic API key needed.
 
 ## License
 
