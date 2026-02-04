@@ -20,6 +20,17 @@
     "level": "info",
     "fileOutput": true
   },
+  "rateLimit": {
+    "enabled": true,
+    "perUser": {
+      "requestsPerMinute": 10,
+      "windowMinutes": 1
+    },
+    "perChannel": {
+      "requestsPerMinute": 20,
+      "windowMinutes": 1
+    }
+  },
   "permissions": {
     "enabled": true,
     "adminRoleId": null,

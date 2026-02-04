@@ -6,6 +6,7 @@
 import { sendWelcomeMessage } from './welcome.js';
 import { isSpam, sendSpamAlert } from './spam.js';
 import { generateResponse } from './ai.js';
+import { checkRateLimit, getRateLimitMessage, startRateLimitCleanup } from '../utils/rateLimit.js';
 
 /**
  * Register bot ready event handler
@@ -31,6 +32,10 @@ export function registerReadyHandler(client, config, healthMonitor) {
     }
     if (config.moderation?.enabled) {
       console.log(`🛡️ Moderation enabled`);
+    }
+    if (config.rateLimit?.enabled) {
+      console.log(`⏱️ Rate limiting enabled (${config.rateLimit.perUser.requestsPerMinute}/min per user, ${config.rateLimit.perChannel.requestsPerMinute}/min per channel)`);
+      startRateLimitCleanup(config);
     }
   });
 }
@@ -82,6 +87,13 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
 
         if (!cleanContent) {
           await message.reply("Hey! What's up?");
+          return;
+        }
+
+        // Check rate limits
+        const rateLimitCheck = checkRateLimit(message.author.id, message.channel.id, config);
+        if (!rateLimitCheck.allowed) {
+          await message.reply(getRateLimitMessage(rateLimitCheck.retryAfter, rateLimitCheck.type));
           return;
         }
 
