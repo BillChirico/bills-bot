@@ -13,7 +13,7 @@ import { info, warn, error as logError } from '../logger.js';
 import { OPENCLAW_URL, OPENCLAW_TOKEN } from './ai.js';
 
 // ── Per-channel state ──────────────────────────────────────────────────────────
-// Map<channelId, { messages: Array<{author, content}>, counter: number, lastActive: number }>
+// Map<channelId, { messages: Array<{author, content}>, counter: number, epoch: number, lastActive: number }>
 const channelBuffers = new Map();
 
 // Guard against concurrent evaluations on the same channel
@@ -53,7 +53,7 @@ function evictInactiveChannels() {
 function getBuffer(channelId) {
   if (!channelBuffers.has(channelId)) {
     evictInactiveChannels();
-    channelBuffers.set(channelId, { messages: [], counter: 0, lastActive: Date.now() });
+    channelBuffers.set(channelId, { messages: [], counter: 0, epoch: 0, lastActive: Date.now() });
   }
   const buf = channelBuffers.get(channelId);
   buf.lastActive = Date.now();
@@ -216,10 +216,19 @@ export async function accumulate(message, config) {
   if (evaluatingChannels.has(channelId)) return;
   evaluatingChannels.add(channelId);
 
+  // Capture epoch to detect cancellation from @mentions during evaluation
+  const startEpoch = buf.epoch;
+
   try {
     info('ChimeIn evaluating', { channelId, buffered: buf.messages.length, counter: buf.counter });
 
     const yes = await shouldChimeIn(buf, config);
+
+    // Check if evaluation was cancelled (e.g., by a @mention)
+    if (buf.epoch !== startEpoch) {
+      info('ChimeIn evaluation cancelled', { channelId });
+      return;
+    }
 
     if (yes) {
       info('ChimeIn triggered — generating response', { channelId });
@@ -228,6 +237,12 @@ export async function accumulate(message, config) {
 
       // Use separate context to avoid polluting shared AI history
       const response = await generateChimeInResponse(buf, config);
+
+      // Check again after generating response
+      if (buf.epoch !== startEpoch) {
+        info('ChimeIn response cancelled', { channelId });
+        return;
+      }
 
       // Don't send error-like or empty responses as unsolicited messages
       if (!response || response.startsWith('Sorry, I') || response.startsWith('Error')) {
@@ -270,5 +285,6 @@ export function resetCounter(channelId) {
   const buf = channelBuffers.get(channelId);
   if (buf) {
     buf.counter = 0;
+    buf.epoch += 1; // Signal cancellation to any in-flight evaluation
   }
 }
