@@ -88,15 +88,15 @@ async function shouldChimeIn(buffer, config) {
     .map((m) => `${m.author}: ${m.content}`)
     .join('\n');
 
-  // User content first, system instruction last to mitigate prompt injection
+  // System message first for API compatibility with OpenAI-compatible proxies
   const messages = [
+    {
+      role: 'system',
+      content: `You have the following personality:\n${systemPrompt}\n\nYou're monitoring a Discord conversation shown inside <conversation> tags. Based on those messages, could you add something genuinely valuable, interesting, funny, or helpful? Only say YES if a real person would actually want to chime in. Don't chime in just to be present. Reply with only YES or NO.`,
+    },
     {
       role: 'user',
       content: `<conversation>\n${conversationText}\n</conversation>`,
-    },
-    {
-      role: 'system',
-      content: `You have the following personality:\n${systemPrompt}\n\nYou're monitoring a Discord conversation shown inside <conversation> tags above. Based on those messages, could you add something genuinely valuable, interesting, funny, or helpful? Only say YES if a real person would actually want to chime in. Don't chime in just to be present. Reply with only YES or NO.`,
     },
   ];
 
