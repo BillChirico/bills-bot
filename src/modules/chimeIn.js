@@ -13,7 +13,7 @@ import { info, warn, error as logError } from '../logger.js';
 import { OPENCLAW_URL, OPENCLAW_TOKEN } from './ai.js';
 
 // ── Per-channel state ──────────────────────────────────────────────────────────
-// Map<channelId, { messages: Array<{author, content}>, counter: number, lastActive: number }>
+// Map<channelId, { messages: Array<{author, content}>, counter: number, lastActive: number, abortController: AbortController|null }>
 const channelBuffers = new Map();
 
 // Guard against concurrent evaluations on the same channel
@@ -78,7 +78,7 @@ function isChannelEligible(channelId, chimeInConfig) {
 /**
  * Call the evaluation LLM (cheap / fast) to decide whether to chime in
  */
-async function shouldChimeIn(buffer, config) {
+async function shouldChimeIn(buffer, config, signal) {
   const chimeInConfig = config.chimeIn || {};
   const model = chimeInConfig.model || 'claude-haiku-4-5';
   const systemPrompt = config.ai?.systemPrompt || 'You are a helpful Discord bot.';
@@ -88,19 +88,23 @@ async function shouldChimeIn(buffer, config) {
     .map((m) => `${m.author}: ${m.content}`)
     .join('\n');
 
-  // User content first, system instruction last to mitigate prompt injection
+  // System instruction first (required by OpenAI-compatible proxies for Anthropic models)
   const messages = [
+    {
+      role: 'system',
+      content: `You have the following personality:\n${systemPrompt}\n\nYou're monitoring a Discord conversation shown inside <conversation> tags. Based on those messages, could you add something genuinely valuable, interesting, funny, or helpful? Only say YES if a real person would actually want to chime in. Don't chime in just to be present. Reply with only YES or NO.`,
+    },
     {
       role: 'user',
       content: `<conversation>\n${conversationText}\n</conversation>`,
     },
-    {
-      role: 'system',
-      content: `You have the following personality:\n${systemPrompt}\n\nYou're monitoring a Discord conversation shown inside <conversation> tags above. Based on those messages, could you add something genuinely valuable, interesting, funny, or helpful? Only say YES if a real person would actually want to chime in. Don't chime in just to be present. Reply with only YES or NO.`,
-    },
   ];
 
   try {
+    const fetchSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+      : AbortSignal.timeout(10_000);
+
     const response = await fetch(OPENCLAW_URL, {
       method: 'POST',
       headers: {
@@ -112,7 +116,7 @@ async function shouldChimeIn(buffer, config) {
         max_tokens: 10,
         messages,
       }),
-      signal: AbortSignal.timeout(10_000),
+      signal: fetchSignal,
     });
 
     if (!response.ok) {
@@ -134,7 +138,7 @@ async function shouldChimeIn(buffer, config) {
  * Generate a chime-in response using a separate context (not shared AI history).
  * This avoids polluting the main conversation history used by @mention responses.
  */
-async function generateChimeInResponse(buffer, config) {
+async function generateChimeInResponse(buffer, config, signal) {
   const systemPrompt = config.ai?.systemPrompt || 'You are a helpful Discord bot.';
   const model = config.ai?.model || 'claude-sonnet-4-20250514';
   const maxTokens = config.ai?.maxTokens || 1024;
@@ -151,6 +155,10 @@ async function generateChimeInResponse(buffer, config) {
     },
   ];
 
+  const fetchSignal = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+    : AbortSignal.timeout(30_000);
+
   const response = await fetch(OPENCLAW_URL, {
     method: 'POST',
     headers: {
@@ -162,7 +170,7 @@ async function generateChimeInResponse(buffer, config) {
       max_tokens: maxTokens,
       messages,
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: fetchSignal,
   });
 
   if (!response.ok) {
@@ -223,7 +231,7 @@ export async function accumulate(message, config) {
   try {
     info('ChimeIn evaluating', { channelId, buffered: buf.messages.length, counter: buf.counter });
 
-    const yes = await shouldChimeIn(buf, config);
+    const yes = await shouldChimeIn(buf, config, abortController.signal);
 
     // Check if this evaluation was cancelled (e.g. bot was @mentioned during evaluation)
     if (abortController.signal.aborted) {
@@ -237,7 +245,7 @@ export async function accumulate(message, config) {
       await message.channel.sendTyping();
 
       // Use separate context to avoid polluting shared AI history
-      const response = await generateChimeInResponse(buf, config);
+      const response = await generateChimeInResponse(buf, config, abortController.signal);
 
       // Re-check cancellation after response generation
       if (abortController.signal.aborted) {
@@ -251,7 +259,19 @@ export async function accumulate(message, config) {
       } else {
         // Send as a plain channel message (not a reply)
         if (response.length > 2000) {
-          const chunks = response.match(/[\s\S]{1,1990}/g) || [];
+          // Split on word boundaries to avoid breaking mid-word/URL/emoji
+          const chunks = [];
+          let remaining = response;
+          while (remaining.length > 0) {
+            if (remaining.length <= 1990) {
+              chunks.push(remaining);
+              break;
+            }
+            let splitAt = remaining.lastIndexOf(' ', 1990);
+            if (splitAt <= 0) splitAt = 1990;
+            chunks.push(remaining.slice(0, splitAt));
+            remaining = remaining.slice(splitAt).trimStart();
+          }
           for (const chunk of chunks) {
             await message.channel.send(chunk);
           }
