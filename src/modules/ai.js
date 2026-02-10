@@ -25,9 +25,9 @@ export function setConversationHistory(history) {
   conversationHistory = history;
 }
 
-// OpenClaw API endpoint
-const OPENCLAW_URL = process.env.OPENCLAW_URL || 'http://localhost:18789/v1/chat/completions';
-const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
+// OpenClaw API endpoint (exported for use by other modules)
+export const OPENCLAW_URL = process.env.OPENCLAW_URL || 'http://localhost:18789/v1/chat/completions';
+export const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
 
 /**
  * Get or create conversation history for a channel
@@ -64,10 +64,14 @@ export function addToHistory(channelId, role, content) {
  * @param {string} username - Username
  * @param {Object} config - Bot configuration
  * @param {Object} healthMonitor - Health monitor instance (optional)
- * @returns {Promise<string>} AI response
+ * @param {Object} options - Additional options
+ * @param {boolean} options.skipHistory - Skip adding to conversation history (for chime-in)
+ * @param {boolean} options.returnNullOnError - Return null instead of error string on failure
+ * @returns {Promise<string|null>} AI response or null on error if returnNullOnError is true
  */
-export async function generateResponse(channelId, userMessage, username, config, healthMonitor = null) {
-  const history = getHistory(channelId);
+export async function generateResponse(channelId, userMessage, username, config, healthMonitor = null, options = {}) {
+  const { skipHistory = false, returnNullOnError = false } = options;
+  const history = skipHistory ? [] : getHistory(channelId);
 
   const systemPrompt = config.ai?.systemPrompt || `You are Volvox Bot, a helpful and friendly Discord bot for the Volvox developer community.
 You're witty, knowledgeable about programming and tech, and always eager to help.
@@ -106,7 +110,13 @@ You can use Discord markdown formatting.`;
     }
 
     const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || "I got nothing. Try again?";
+    const reply = data.choices?.[0]?.message?.content;
+
+    // Handle empty response
+    if (!reply) {
+      if (returnNullOnError) return null;
+      return "I got nothing. Try again?";
+    }
 
     // Log AI response
     info('AI response', { channelId, username, response: reply.substring(0, 500) });
@@ -117,9 +127,11 @@ You can use Discord markdown formatting.`;
       healthMonitor.setAPIStatus('ok');
     }
 
-    // Update history
-    addToHistory(channelId, 'user', `${username}: ${userMessage}`);
-    addToHistory(channelId, 'assistant', reply);
+    // Update history (skip for chime-in to avoid polluting conversation context)
+    if (!skipHistory) {
+      addToHistory(channelId, 'user', `${username}: ${userMessage}`);
+      addToHistory(channelId, 'assistant', reply);
+    }
 
     return reply;
   } catch (err) {
@@ -127,6 +139,6 @@ You can use Discord markdown formatting.`;
     if (healthMonitor) {
       healthMonitor.setAPIStatus('error');
     }
-    return "Sorry, I'm having trouble thinking right now. Try again in a moment!";
+    return returnNullOnError ? null : "Sorry, I'm having trouble thinking right now. Try again in a moment!";
   }
 }

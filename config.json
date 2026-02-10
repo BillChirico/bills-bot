@@ -8,9 +8,9 @@
   },
   "chimeIn": {
     "enabled": true,
-    "evaluateEvery": 1,
+    "evaluateEvery": 10,
     "model": "claude-haiku-4-5",
-    "maxBufferSize": 10,
+    "maxBufferSize": 30,
     "channels": [],
     "excludeChannels": []
   },

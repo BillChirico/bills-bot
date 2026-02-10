@@ -6,7 +6,7 @@
 import { sendWelcomeMessage } from './welcome.js';
 import { isSpam, sendSpamAlert } from './spam.js';
 import { generateResponse } from './ai.js';
-import { accumulate, resetCounter } from './chimeIn.js';
+import { accumulate } from './chimeIn.js';
 
 /**
  * Register bot ready event handler
@@ -66,21 +66,23 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
       return;
     }
 
+    // AI chat - respond when mentioned
+    const isMentioned = config.ai?.enabled && message.mentions.has(client.user);
+    const isReply = config.ai?.enabled && message.reference && message.mentions.repliedUser?.id === client.user.id;
+
     // Chime-in: accumulate message for organic participation (fire-and-forget)
-    accumulate(message, client, config, healthMonitor);
+    // Skip accumulation if this is a mention/reply to avoid double-responding
+    if (!isMentioned && !isReply) {
+      accumulate(message, client, config, healthMonitor);
+    }
 
     // AI chat - respond when mentioned
     if (config.ai?.enabled) {
-      const isMentioned = message.mentions.has(client.user);
-      const isReply = message.reference && message.mentions.repliedUser?.id === client.user.id;
-
       // Check if in allowed channel (if configured)
       const allowedChannels = config.ai?.channels || [];
       const isAllowedChannel = allowedChannels.length === 0 || allowedChannels.includes(message.channel.id);
 
       if ((isMentioned || isReply) && isAllowedChannel) {
-        // Reset chime-in counter so we don't double-respond
-        resetCounter(message.channel.id);
 
         // Remove the mention from the message
         const cleanContent = message.content

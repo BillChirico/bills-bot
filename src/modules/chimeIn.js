@@ -10,7 +10,7 @@
  */
 
 import { info, warn, error as logError } from '../logger.js';
-import { generateResponse } from './ai.js';
+import { generateResponse, OPENCLAW_URL, OPENCLAW_TOKEN } from './ai.js';
 
 // ── Per-channel state ──────────────────────────────────────────────────────────
 // Map<channelId, { messages: Array<{author, content}>, counter: number }>
@@ -18,10 +18,6 @@ const channelBuffers = new Map();
 
 // Guard against concurrent evaluations on the same channel
 const evaluatingChannels = new Set();
-
-// OpenClaw API (same endpoint as ai.js)
-const OPENCLAW_URL = process.env.OPENCLAW_URL || 'http://localhost:18789/v1/chat/completions';
-const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -165,16 +161,22 @@ export async function accumulate(message, client, config, healthMonitor) {
         '_chime-in_',   // pseudo-username so ai.js logs it distinctly
         config,
         healthMonitor,
+        { skipHistory: true, returnNullOnError: true },
       );
 
-      // Send as a plain channel message (not a reply)
-      if (response.length > 2000) {
-        const chunks = response.match(/[\s\S]{1,1990}/g) || [];
-        for (const chunk of chunks) {
-          await message.channel.send(chunk);
+      // Only send if we got a valid response (not an error)
+      if (response) {
+        // Send as a plain channel message (not a reply)
+        if (response.length > 2000) {
+          const chunks = response.match(/[\s\S]{1,1990}/g) || [];
+          for (const chunk of chunks) {
+            await message.channel.send(chunk);
+          }
+        } else {
+          await message.channel.send(response);
         }
       } else {
-        await message.channel.send(response);
+        info('ChimeIn skipping send due to API error', { channelId });
       }
 
       // Clear the buffer entirely after a successful chime-in
@@ -190,18 +192,5 @@ export async function accumulate(message, client, config, healthMonitor) {
     buf.counter = 0;
   } finally {
     evaluatingChannels.delete(channelId);
-  }
-}
-
-/**
- * Reset the chime-in counter for a channel (call when the bot is @mentioned
- * so the mention handler doesn't double-fire with a chime-in).
- *
- * @param {string} channelId
- */
-export function resetCounter(channelId) {
-  const buf = channelBuffers.get(channelId);
-  if (buf) {
-    buf.counter = 0;
   }
 }
