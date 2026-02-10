@@ -151,8 +151,7 @@ async function generateChimeInResponse(buffer, config) {
     },
   ];
 
-  // Wrap in Promise.race for a 30s timeout
-  const fetchPromise = fetch(OPENCLAW_URL, {
+  const response = await fetch(OPENCLAW_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -165,12 +164,6 @@ async function generateChimeInResponse(buffer, config) {
     }),
     signal: AbortSignal.timeout(30_000),
   });
-
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('ChimeIn response generation timed out')), 30_000),
-  );
-
-  const response = await Promise.race([fetchPromise, timeoutPromise]);
 
   if (!response.ok) {
     throw new Error(`API error: ${response.status} ${response.statusText}`);
@@ -188,9 +181,8 @@ async function generateChimeInResponse(buffer, config) {
  *
  * @param {Object} message - Discord.js Message object
  * @param {Object} config  - Bot configuration
- * @param {Object} healthMonitor - Health monitor instance
  */
-export async function accumulate(message, config, healthMonitor) {
+export async function accumulate(message, config) {
   const chimeInConfig = config.chimeIn;
   if (!chimeInConfig?.enabled) return;
   if (!isChannelEligible(message.channel.id, chimeInConfig)) return;
@@ -279,14 +271,4 @@ export function resetCounter(channelId) {
   if (buf) {
     buf.counter = 0;
   }
-}
-
-/**
- * Check if a channel is currently being evaluated for chime-in.
- *
- * @param {string} channelId
- * @returns {boolean}
- */
-export function isEvaluating(channelId) {
-  return evaluatingChannels.has(channelId);
 }

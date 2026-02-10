@@ -114,7 +114,7 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
     }
 
     // Chime-in: accumulate message for organic participation (fire-and-forget)
-    accumulate(message, config, healthMonitor).catch((err) => {
+    accumulate(message, config).catch((err) => {
       console.error('ChimeIn accumulate error:', err.message);
     });
   });
