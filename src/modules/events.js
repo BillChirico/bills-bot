@@ -11,6 +11,9 @@ import { accumulate, resetCounter } from './chimeIn.js';
 import { isSpam, sendSpamAlert } from './spam.js';
 import { recordCommunityActivity, sendWelcomeMessage } from './welcome.js';
 
+/** @type {boolean} Guard against duplicate process-level handler registration */
+let processHandlersRegistered = false;
+
 /**
  * Register bot ready event handler
  * @param {Object} client - Discord client
@@ -135,9 +138,12 @@ export function registerErrorHandlers(client) {
     logError('Discord error', { error: err.message, stack: err.stack });
   });
 
-  process.on('unhandledRejection', (err) => {
-    logError('Unhandled rejection', { error: err?.message, stack: err?.stack });
-  });
+  if (!processHandlersRegistered) {
+    process.on('unhandledRejection', (err) => {
+      logError('Unhandled rejection', { error: err?.message, stack: err?.stack });
+    });
+    processHandlersRegistered = true;
+  }
 }
 
 /**
