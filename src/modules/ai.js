@@ -123,7 +123,7 @@ export function getHistory(channelId) {
       const limit = getHistoryLength();
       pool
         .query(
-          `SELECT role, content, username FROM conversations
+          `SELECT role, content FROM conversations
            WHERE channel_id = $1
            ORDER BY created_at DESC
            LIMIT $2`,
@@ -135,12 +135,13 @@ export function getHistory(channelId) {
               .reverse()
               .map((row) => ({ role: row.role, content: row.content }));
             // Merge: keep any messages added concurrently via addToHistory
-            const current = conversationHistory.get(channelId) || [];
+            const arr = conversationHistory.get(channelId) || [];
             // DB messages come first, then append any new messages added since cache miss
-            const merged = [...dbHistory, ...current];
-            // Trim to configured limit
-            const limit = getHistoryLength();
-            conversationHistory.set(channelId, merged.slice(-limit));
+            const merged = [...dbHistory, ...arr];
+            // Trim to configured limit — mutate the existing array in-place
+            // so callers holding a reference see the updated contents
+            arr.length = 0;
+            arr.push(...merged.slice(-limit));
             info('Hydrated history from DB for channel', {
               channelId,
               count: dbHistory.length,
@@ -175,7 +176,7 @@ export async function getHistoryAsync(channelId) {
     try {
       const limit = getHistoryLength();
       const { rows } = await pool.query(
-        `SELECT role, content, username FROM conversations
+        `SELECT role, content FROM conversations
          WHERE channel_id = $1
          ORDER BY created_at DESC
          LIMIT $2`,
@@ -236,8 +237,10 @@ export function addToHistory(channelId, role, content, username) {
         [channelId, role, content, username || null],
       )
       .catch((err) => {
-        logWarn('Failed to persist message to DB', {
+        logError('Failed to persist message to DB', {
           channelId,
+          role,
+          username: username || null,
           error: err.message,
         });
       });
@@ -259,32 +262,39 @@ export async function initConversationHistory() {
   try {
     const limit = getHistoryLength();
 
-    // Get distinct channels that have conversations
-    const { rows: channels } = await pool.query('SELECT DISTINCT channel_id FROM conversations');
+    // Single query: fetch the last N messages per channel using ROW_NUMBER()
+    const { rows } = await pool.query(
+      `SELECT channel_id, role, content
+       FROM (
+         SELECT channel_id, role, content, created_at,
+                ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC) AS rn
+         FROM conversations
+       ) sub
+       WHERE rn <= $1
+       ORDER BY channel_id, created_at ASC`,
+      [limit],
+    );
 
+    // Group rows by channel_id
+    const channelSet = new Set();
     let totalMessages = 0;
 
-    for (const { channel_id: channelId } of channels) {
-      const { rows } = await pool.query(
-        `SELECT role, content FROM conversations
-         WHERE channel_id = $1
-         ORDER BY created_at DESC
-         LIMIT $2`,
-        [channelId, limit],
-      );
+    for (const row of rows) {
+      const channelId = row.channel_id;
+      channelSet.add(channelId);
 
-      if (rows.length > 0) {
-        const history = rows.reverse().map((row) => ({
-          role: row.role,
-          content: row.content,
-        }));
-        conversationHistory.set(channelId, history);
-        totalMessages += history.length;
+      if (!conversationHistory.has(channelId)) {
+        conversationHistory.set(channelId, []);
       }
+      conversationHistory.get(channelId).push({
+        role: row.role,
+        content: row.content,
+      });
+      totalMessages++;
     }
 
     info('Conversation history hydrated from DB', {
-      channels: channels.length,
+      channels: channelSet.size,
       totalMessages,
     });
   } catch (err) {
