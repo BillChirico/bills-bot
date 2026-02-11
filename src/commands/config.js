@@ -4,10 +4,10 @@
  */
 
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { getConfig, setConfigValue, resetConfig, loadConfigFromFile } from '../modules/config.js';
+import { getConfig, setConfigValue, resetConfig } from '../modules/config.js';
 
-// Derived from config.json top-level keys so static slash-command choices stay in sync automatically.
-const VALID_SECTIONS = Object.keys(loadConfigFromFile());
+// Derived from live config at module load time (after loadConfig() has populated the cache).
+const VALID_SECTIONS = Object.keys(getConfig());
 
 /** @type {Array<{name: string, value: string}>} Derived choices for section options */
 const SECTION_CHOICES = VALID_SECTIONS.map(s => ({
