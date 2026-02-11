@@ -313,6 +313,9 @@ function validatePathSegments(segments) {
  * @param {*} value - Value to set at the leaf key
  */
 function setNestedValue(root, pathParts, value) {
+  if (pathParts.length === 0) {
+    throw new Error('setNestedValue requires at least one path segment');
+  }
   let current = root;
   for (let i = 0; i < pathParts.length - 1; i++) {
     if (current[pathParts[i]] === undefined || typeof current[pathParts[i]] !== 'object') {
