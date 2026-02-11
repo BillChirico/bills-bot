@@ -232,7 +232,7 @@ function buildVibeLine(snapshot, suggestedChannels) {
         return `${snapshot.voiceParticipants} ${snapshot.voiceParticipants === 1 ? 'person is' : 'people are'} hanging out in voice right now — jump in anytime.`;
       }
       if (snapshot.voiceChannels > 0) {
-        return `${snapshot.voiceParticipants} people are hanging out in voice right now, and ${channelText} is waking up.`;
+        return `${snapshot.voiceParticipants} ${snapshot.voiceParticipants === 1 ? 'person is' : 'people are'} hanging out in voice right now, and ${channelText} is waking up.`;
       }
       return hasChannels
         ? `It's a chill moment, but ${channelText} is where people are checking in.`
