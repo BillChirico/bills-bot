@@ -157,11 +157,17 @@ function getCommunitySnapshot(guild, settings) {
     const recent = timestamps.filter(t => t >= cutoff);
 
     if (!recent.length) {
+      activityMap.delete(channelId);
       continue;
     }
 
     messageCount += recent.length;
     channelCounts.push({ channelId, count: recent.length });
+  }
+
+  // Evict guild entry if no channels remain
+  if (activityMap.size === 0) {
+    guildActivity.delete(guild.id);
   }
 
   const topChannelIds = channelCounts
