@@ -338,7 +338,7 @@ function getGreetingTemplates(timeOfDay) {
     ],
     afternoon: [
       (ctx) => `👋 Welcome to **${ctx.server}**, <@${ctx.id}>!`,
-      (ctx) => `Nice timing, <@${ctx.id}> - welcome to the Volvox corner of the internet.`,
+      (ctx) => `Nice timing, <@${ctx.id}> - welcome to the **${ctx.server}** corner of the internet.`,
       (ctx) => `Hey <@${ctx.id}>! Glad you made it into **${ctx.server}**.`,
     ],
     evening: [
