@@ -262,6 +262,11 @@ export async function initConversationHistory() {
   try {
     const limit = getHistoryLength();
 
+    // Clear existing history - DB is the source of truth when available.
+    // This prevents duplicates when loadState() has already populated the map
+    // from file-based state before this function is called.
+    conversationHistory.clear();
+
     // Single query: fetch the last N messages per channel using ROW_NUMBER()
     const { rows } = await pool.query(
       `SELECT channel_id, role, content
