@@ -108,14 +108,15 @@ describe('ai module', () => {
       });
 
       await hydrationPromise;
-      await Promise.resolve(); // flush .then callback
 
-      expect(historyRef).toEqual([
-        { role: 'user', content: 'db message' },
-        { role: 'assistant', content: 'db reply' },
-        { role: 'user', content: 'concurrent message' },
-      ]);
-      expect(getHistory('race-channel')).toBe(historyRef);
+      await vi.waitFor(() => {
+        expect(historyRef).toEqual([
+          { role: 'user', content: 'db message' },
+          { role: 'assistant', content: 'db reply' },
+          { role: 'user', content: 'concurrent message' },
+        ]);
+        expect(getHistory('race-channel')).toBe(historyRef);
+      });
     });
   });
 
