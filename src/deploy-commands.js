@@ -10,11 +10,11 @@
  *   GUILD_ID (optional)
  */
 
-import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as dotenvConfig } from 'dotenv';
-import { error as logError, warn as logWarn } from './logger.js';
+import { error as logError } from './logger.js';
+import { loadCommandsFromDirectory } from './utils/loadCommands.js';
 import { registerCommands } from './utils/registerCommands.js';
 
 dotenvConfig();
@@ -36,20 +36,10 @@ if (!clientId) {
 }
 
 async function loadCommands() {
-  const commandsPath = join(__dirname, 'commands');
-  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
-  const commands = [];
-
-  for (const file of commandFiles) {
-    const command = await import(join(commandsPath, file));
-    if (command.data && command.execute) {
-      commands.push(command);
-    } else {
-      logWarn(`Skipping ${file}: missing .data or .execute export`);
-    }
-  }
-
-  return commands;
+  return loadCommandsFromDirectory({
+    commandsPath: join(__dirname, 'commands'),
+    logLoaded: false,
+  });
 }
 
 async function main() {
