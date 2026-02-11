@@ -88,6 +88,9 @@ vi.mock('discord.js', () => {
   return {
     Client,
     Collection,
+    Events: {
+      ClientReady: 'clientReady',
+    },
     GatewayIntentBits: {
       Guilds: 1,
       GuildMessages: 2,
