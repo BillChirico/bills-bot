@@ -5,6 +5,7 @@
 
 import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
 import { getConfig, resetConfig, setConfigValue } from '../modules/config.js';
+import { warn as logWarn } from '../logger.js';
 
 /**
  * Escape backticks in user-provided strings to prevent breaking Discord inline code formatting.
@@ -281,13 +282,31 @@ async function handleSet(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
 
+    // Contract: setConfigValue(path, value) returns the updated section object
+    // for the first path segment (e.g. path "ai.model" returns config.ai).
     const updatedSection = await setConfigValue(path, value);
 
-    // Traverse to the actual leaf value for display
-    const leafValue = path
-      .split('.')
-      .slice(1)
-      .reduce((obj, k) => obj?.[k], updatedSection);
+    const parts = path.split('.');
+
+    // Traverse to the actual leaf value for display from the section-shaped return value
+    let leafValue = parts.slice(1).reduce((obj, k) => obj?.[k], updatedSection);
+
+    // Defensive fallback if the contract ever changes and the full root object is returned
+    if (leafValue === undefined) {
+      leafValue = parts.reduce((obj, k) => obj?.[k], updatedSection);
+
+      if (leafValue === undefined) {
+        logWarn('Unexpected setConfigValue return shape in /config set', {
+          path,
+          expectedShape: 'section',
+          returnedType: Array.isArray(updatedSection) ? 'array' : typeof updatedSection,
+          returnedKeys:
+            updatedSection && typeof updatedSection === 'object'
+              ? Object.keys(updatedSection).slice(0, 10)
+              : null,
+        });
+      }
+    }
 
     const displayValue = JSON.stringify(leafValue, null, 2) ?? value;
     const truncatedValue =
