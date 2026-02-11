@@ -64,7 +64,7 @@ export async function loadConfig() {
         throw new Error('No configuration source available: config.json is missing and database is not initialized');
       }
       info('Database not available, using config.json');
-      configCache = { ...fileConfig };
+      configCache = structuredClone(fileConfig);
       return configCache;
     }
 
@@ -88,7 +88,7 @@ export async function loadConfig() {
         }
         await client.query('COMMIT');
         info('Config seeded to database');
-        configCache = { ...fileConfig };
+        configCache = structuredClone(fileConfig);
       } catch (txErr) {
         try { await client.query('ROLLBACK'); } catch { /* ignore rollback failure */ }
         throw txErr;
@@ -109,7 +109,7 @@ export async function loadConfig() {
       throw err;
     }
     logError('Failed to load config from database, using config.json', { error: err.message });
-    configCache = { ...fileConfig };
+    configCache = structuredClone(fileConfig);
   }
 
   return configCache;
@@ -331,7 +331,18 @@ function isPlainObject(val) {
 }
 
 /**
- * Parse a string value into its appropriate JS type
+ * Parse a string value into its appropriate JS type.
+ *
+ * Coercion rules:
+ * - "true" / "false" → boolean
+ * - "null" → null
+ * - Numeric strings → number (unless beyond Number.MAX_SAFE_INTEGER)
+ * - JSON arrays/objects → parsed value
+ * - Everything else → kept as-is string
+ *
+ * To force a literal string (e.g. the word "true"), wrap it in JSON quotes:
+ *   "\"true\"" → parsed by JSON.parse into the string "true"
+ *
  * @param {string} value - String value to parse
  * @returns {*} Parsed value
  */
