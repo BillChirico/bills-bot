@@ -63,18 +63,22 @@ export const data = new SlashCommandBuilder()
 export const adminOnly = true;
 
 /**
- * Recursively flatten config keys into dot-notation paths
+ * Recursively collect leaf-only dot-notation paths from a config object.
+ * Only emits paths that point to non-object values (leaves), preventing
+ * autocomplete from suggesting intermediate paths whose selection would
+ * overwrite all nested config beneath them with a scalar.
  * @param {Object} obj - Object to flatten
  * @param {string} prefix - Current path prefix
- * @returns {string[]} Array of dot-notation paths
+ * @returns {string[]} Array of dot-notation leaf paths
  */
 function flattenConfigKeys(obj, prefix) {
   const paths = [];
   for (const [key, value] of Object.entries(obj)) {
     const fullPath = `${prefix}.${key}`;
-    paths.push(fullPath);
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
       paths.push(...flattenConfigKeys(value, fullPath));
+    } else {
+      paths.push(fullPath);
     }
   }
   return paths;
