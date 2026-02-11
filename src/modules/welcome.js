@@ -78,7 +78,7 @@ export async function sendWelcomeMessage(member, client, config) {
     const channel = await client.channels.fetch(config.welcome.channelId);
     if (!channel) return;
 
-    const useDynamic = config.welcome?.dynamic?.enabled !== false;
+    const useDynamic = config.welcome?.dynamic?.enabled === true;
 
     const message = useDynamic
       ? buildDynamicWelcomeMessage(member, config)
