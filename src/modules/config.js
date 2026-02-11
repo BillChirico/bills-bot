@@ -146,10 +146,7 @@ export async function setConfigValue(path, value) {
   const finalKey = parts[parts.length - 1];
   const parsedVal = parseValue(value);
 
-  // Build the JSONB sub-path for atomic DB update (keys after the section)
-  const subPath = parts.slice(1);
-
-  // Deep clone the section for the INSERT case (new section that doesn't exist yet)
+  // Deep clone the section and build the full object with all intermediate paths
   const sectionClone = structuredClone(configCache[section] || {});
   let current = sectionClone;
   for (let i = 1; i < parts.length - 1; i++) {
@@ -160,17 +157,18 @@ export async function setConfigValue(path, value) {
   }
   current[finalKey] = parsedVal;
 
-  // Write to database first using jsonb_set for atomic partial update,
-  // preventing concurrent setConfigValue calls from overwriting each other
+  // Write to database using the full sectionClone which includes all intermediate paths.
+  // Note: jsonb_set was previously used but it requires all intermediate keys in the path
+  // to already exist, causing silent data loss for deep nested paths (e.g., ai.newCategory.setting).
   let dbPersisted = false;
   try {
     const pool = getPool();
     await pool.query(
       `INSERT INTO config (key, value) VALUES ($1, $2)
        ON CONFLICT (key) DO UPDATE
-       SET value = jsonb_set(config.value, $3::text[], $4::jsonb, true),
+       SET value = $2,
            updated_at = NOW()`,
-      [section, JSON.stringify(sectionClone), subPath, JSON.stringify(parsedVal)]
+      [section, JSON.stringify(sectionClone)]
     );
     dbPersisted = true;
   } catch (err) {
