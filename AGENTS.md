@@ -112,6 +112,27 @@ client.on('eventName', (args) => yourHandler(args, config));
 - Test config structure, command exports, utility functions
 - Run `pnpm test` before every commit
 
+## Documentation
+
+**Keep docs up to date — this is non-negotiable.**
+
+After every code change, check whether these files need updating:
+
+- **`README.md`** — setup instructions, architecture overview, config reference, env vars
+- **`AGENTS.md`** (this file) — key files table, code conventions, "how to add" guides, common pitfalls
+- **`CONTRIBUTING.md`** — workflow, branching, commit conventions
+- **`.env.example`** — if you add/remove/rename an environment variable, update this immediately
+- **`config.json`** — if you add a new config section or key, document it in README.md's config reference
+
+**When to update:**
+- Added a new command → update Key Files table, add to README command list
+- Added a new module → update Key Files table, document config section
+- Changed env vars → update `.env.example` and README's environment section
+- Changed architecture (new dependency, new pattern) → update Stack section and relevant guides
+- Found a new pitfall → add to Common Pitfalls below
+
+**Rule of thumb:** If a new contributor (human or AI) would be confused without the update, write it.
+
 ## Common Pitfalls
 
 1. **Missing `node:` prefix** — Biome will catch this, but remember it for new imports
