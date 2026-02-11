@@ -238,6 +238,10 @@ describe('config command', () => {
         );
       });
 
+      // deferReply rejects (simulating a Discord API failure), so the error
+      // originates from the defer call — not from setConfigValue. The path
+      // 'ai.key' passes section validation because only the top-level
+      // section ('ai') is checked, making it reach the defer+set path.
       it('should handle error when not deferred', async () => {
         setConfigValue.mockRejectedValueOnce(new Error('error'));
         const mockReply = vi.fn();
