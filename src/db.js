@@ -21,6 +21,13 @@ export async function initDb() {
     throw new Error('DATABASE_URL environment variable is not set');
   }
 
+  // Guard against double initialization — close any existing pool to prevent leaks
+  if (pool) {
+    info('Closing existing database pool before re-initialization');
+    await pool.end().catch(() => {});
+    pool = null;
+  }
+
   pool = new Pool({
     connectionString,
     max: 5,
