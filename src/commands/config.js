@@ -71,24 +71,67 @@ export const data = new SlashCommandBuilder()
 export const adminOnly = true;
 
 /**
+ * Recursively collect dot-notation paths for a config object.
+ * Includes object paths, leaf paths, and nested array/object paths.
+ * @param {*} source - Config value to traverse
+ * @param {string} [prefix] - Current path prefix
+ * @param {string[]} [paths] - Accumulator array
+ * @returns {string[]} Dot-notation config paths
+ */
+function collectConfigPaths(source, prefix = '', paths = []) {
+  if (Array.isArray(source)) {
+    source.forEach((value, index) => {
+      const path = prefix ? `${prefix}.${index}` : String(index);
+      paths.push(path);
+
+      if (value && typeof value === 'object') {
+        collectConfigPaths(value, path, paths);
+      }
+    });
+
+    return paths;
+  }
+
+  if (!source || typeof source !== 'object') {
+    return paths;
+  }
+
+  for (const [key, value] of Object.entries(source)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    paths.push(path);
+
+    if (value && typeof value === 'object') {
+      collectConfigPaths(value, path, paths);
+    }
+  }
+
+  return paths;
+}
+
+/**
  * Handle autocomplete for config paths
  * @param {Object} interaction - Discord interaction
  */
 export async function autocomplete(interaction) {
-  const focusedValue = interaction.options.getFocused().toLowerCase();
+  const focusedValue = interaction.options.getFocused().toLowerCase().trim();
   const config = getConfig();
 
-  const paths = [];
-  for (const [section, value] of Object.entries(config)) {
-    if (typeof value === 'object' && value !== null) {
-      for (const key of Object.keys(value)) {
-        paths.push(`${section}.${key}`);
-      }
-    }
-  }
+  const paths = collectConfigPaths(config);
 
   const filtered = paths
     .filter(p => p.toLowerCase().includes(focusedValue))
+    .sort((a, b) => {
+      const aLower = a.toLowerCase();
+      const bLower = b.toLowerCase();
+      const aStartsWithFocus = aLower.startsWith(focusedValue);
+      const bStartsWithFocus = bLower.startsWith(focusedValue);
+
+      if (aStartsWithFocus !== bStartsWithFocus) {
+        return aStartsWithFocus ? -1 : 1;
+      }
+
+      return aLower.localeCompare(bLower);
+    })
     .slice(0, 25);
 
   await interaction.respond(
