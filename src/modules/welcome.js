@@ -7,6 +7,9 @@ const guildActivity = new Map();
 const DEFAULT_ACTIVITY_WINDOW_MINUTES = 45;
 const MAX_EVENTS_PER_CHANNEL = 250;
 
+/** Notable member-count milestones (hoisted to avoid allocation per welcome event) */
+const NOTABLE_MILESTONES = new Set([10, 25, 50, 100, 250, 500, 1000]);
+
 /** @type {{key: string, set: Set<string>} | null} Cached excluded channels Set */
 let excludedChannelsCache = null;
 
@@ -273,9 +276,8 @@ function getMilestoneLine(memberCount, settings) {
   if (!memberCount) return null;
 
   const interval = Number(settings.milestoneInterval) || 25;
-  const notableMilestones = new Set([10, 25, 50, 100, 250, 500, 1000]);
 
-  if (notableMilestones.has(memberCount) || (interval > 0 && memberCount % interval === 0)) {
+  if (NOTABLE_MILESTONES.has(memberCount) || (interval > 0 && memberCount % interval === 0)) {
     return `🎉 Perfect timing - you're our **#${memberCount}** member milestone!`;
   }
 
