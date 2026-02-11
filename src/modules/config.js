@@ -303,6 +303,9 @@ function validatePathSegments(segments) {
  * @param {*} value - Value to set at the leaf
  */
 function setNestedValue(root, pathParts, value) {
+  if (pathParts.length === 0) {
+    throw new Error('setNestedValue requires at least one path segment');
+  }
   let current = root;
   for (let i = 0; i < pathParts.length - 1; i++) {
     // Defensive: reject prototype-pollution keys even for internal callers
@@ -364,8 +367,12 @@ function parseValue(value) {
     return num;
   }
 
-  // JSON arrays/objects
-  if ((value.startsWith('[') && value.endsWith(']')) || (value.startsWith('{') && value.endsWith('}'))) {
+  // JSON strings (e.g. "\"true\"" → force literal string "true"), arrays, and objects
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith('[') && value.endsWith(']')) ||
+    (value.startsWith('{') && value.endsWith('}'))
+  ) {
     try {
       return JSON.parse(value);
     } catch {
