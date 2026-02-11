@@ -305,12 +305,20 @@ function validatePathSegments(segments) {
 function setNestedValue(root, pathParts, value) {
   let current = root;
   for (let i = 0; i < pathParts.length - 1; i++) {
+    // Defensive: reject prototype-pollution keys even for internal callers
+    if (DANGEROUS_KEYS.has(pathParts[i])) {
+      throw new Error(`Invalid config path segment: '${pathParts[i]}' is a reserved key`);
+    }
     if (current[pathParts[i]] == null || typeof current[pathParts[i]] !== 'object') {
       current[pathParts[i]] = {};
     }
     current = current[pathParts[i]];
   }
-  current[pathParts[pathParts.length - 1]] = value;
+  const leafKey = pathParts[pathParts.length - 1];
+  if (DANGEROUS_KEYS.has(leafKey)) {
+    throw new Error(`Invalid config path segment: '${leafKey}' is a reserved key`);
+  }
+  current[leafKey] = value;
 }
 
 /**
