@@ -281,7 +281,7 @@ function buildCtaLine(channels) {
 function getMilestoneLine(memberCount, settings) {
   if (!memberCount) return null;
 
-  const interval = Number(settings.milestoneInterval) || 25;
+  const interval = Number(settings.milestoneInterval ?? 25);
 
   if (NOTABLE_MILESTONES.has(memberCount) || (interval > 0 && memberCount % interval === 0)) {
     return `🎉 Perfect timing - you're our **#${memberCount}** member milestone!`;
