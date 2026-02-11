@@ -189,32 +189,34 @@ describe('ai module', () => {
       vi.resetModules();
       process.env.OPENCLAW_API_KEY = 'test-key-123';
 
-      vi.mock('../../src/logger.js', () => ({
-        info: vi.fn(),
-        error: vi.fn(),
-        warn: vi.fn(),
-        debug: vi.fn(),
-      }));
+      try {
+        vi.mock('../../src/logger.js', () => ({
+          info: vi.fn(),
+          error: vi.fn(),
+          warn: vi.fn(),
+          debug: vi.fn(),
+        }));
 
-      const { generateResponse: genResponse, setConversationHistory: setHistory } = await import(
-        '../../src/modules/ai.js'
-      );
-      setHistory(new Map());
+        const { generateResponse: genResponse, setConversationHistory: setHistory } = await import(
+          '../../src/modules/ai.js'
+        );
+        setHistory(new Map());
 
-      const mockResponse = {
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: 'OK' } }],
-        }),
-      };
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
+        const mockResponse = {
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            choices: [{ message: { content: 'OK' } }],
+          }),
+        };
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-      await genResponse('ch1', 'Hi', 'user', { ai: {} });
+        await genResponse('ch1', 'Hi', 'user', { ai: {} });
 
-      const fetchCall = globalThis.fetch.mock.calls[0];
-      expect(fetchCall[1].headers.Authorization).toBe('Bearer test-key-123');
-
-      delete process.env.OPENCLAW_API_KEY;
+        const fetchCall = globalThis.fetch.mock.calls[0];
+        expect(fetchCall[1].headers.Authorization).toBe('Bearer test-key-123');
+      } finally {
+        delete process.env.OPENCLAW_API_KEY;
+      }
     });
   });
 });
