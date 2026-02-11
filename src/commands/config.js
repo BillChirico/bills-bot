@@ -1,10 +1,12 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+/**
+ * Config Command
+ * View, set, and reset bot configuration via slash commands
+ */
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const configPath = join(__dirname, '..', '..', 'config.json');
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { getConfig, setConfigValue, resetConfig } from '../modules/config.js';
+
+const VALID_SECTIONS = ['ai', 'chimeIn', 'welcome', 'moderation', 'logging', 'permissions'];
 
 export const data = new SlashCommandBuilder()
   .setName('config')
@@ -20,8 +22,47 @@ export const data = new SlashCommandBuilder()
           .setRequired(false)
           .addChoices(
             { name: 'AI Settings', value: 'ai' },
+            { name: 'Chime In', value: 'chimeIn' },
             { name: 'Welcome Messages', value: 'welcome' },
             { name: 'Moderation', value: 'moderation' },
+            { name: 'Logging', value: 'logging' },
+            { name: 'Permissions', value: 'permissions' }
+          )
+      )
+  )
+  .addSubcommand(subcommand =>
+    subcommand
+      .setName('set')
+      .setDescription('Set a configuration value')
+      .addStringOption(option =>
+        option
+          .setName('path')
+          .setDescription('Dot-notation path (e.g., ai.model, welcome.enabled)')
+          .setRequired(true)
+          .setAutocomplete(true)
+      )
+      .addStringOption(option =>
+        option
+          .setName('value')
+          .setDescription('Value to set (strings, numbers, booleans, JSON arrays)')
+          .setRequired(true)
+      )
+  )
+  .addSubcommand(subcommand =>
+    subcommand
+      .setName('reset')
+      .setDescription('Reset configuration to defaults from config.json')
+      .addStringOption(option =>
+        option
+          .setName('section')
+          .setDescription('Section to reset (omit to reset all)')
+          .setRequired(false)
+          .addChoices(
+            { name: 'AI Settings', value: 'ai' },
+            { name: 'Chime In', value: 'chimeIn' },
+            { name: 'Welcome Messages', value: 'welcome' },
+            { name: 'Moderation', value: 'moderation' },
+            { name: 'Logging', value: 'logging' },
             { name: 'Permissions', value: 'permissions' }
           )
       )
@@ -29,58 +70,177 @@ export const data = new SlashCommandBuilder()
 
 export const adminOnly = true;
 
+/**
+ * Handle autocomplete for config paths
+ * @param {Object} interaction - Discord interaction
+ */
+export async function autocomplete(interaction) {
+  const focusedValue = interaction.options.getFocused().toLowerCase();
+  const config = getConfig();
+
+  const paths = [];
+  for (const [section, value] of Object.entries(config)) {
+    if (typeof value === 'object' && value !== null) {
+      for (const key of Object.keys(value)) {
+        paths.push(`${section}.${key}`);
+      }
+    }
+  }
+
+  const filtered = paths
+    .filter(p => p.toLowerCase().includes(focusedValue))
+    .slice(0, 25);
+
+  await interaction.respond(
+    filtered.map(p => ({ name: p, value: p }))
+  );
+}
+
+/**
+ * Execute the config command
+ * @param {Object} interaction - Discord interaction
+ */
 export async function execute(interaction) {
   const subcommand = interaction.options.getSubcommand();
 
-  if (subcommand === 'view') {
-    try {
-      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-      const section = interaction.options.getString('section');
+  switch (subcommand) {
+    case 'view':
+      await handleView(interaction);
+      break;
+    case 'set':
+      await handleSet(interaction);
+      break;
+    case 'reset':
+      await handleReset(interaction);
+      break;
+  }
+}
 
-      const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle('⚙️ Bot Configuration')
-        .setTimestamp();
+/**
+ * Handle /config view
+ */
+async function handleView(interaction) {
+  try {
+    const config = getConfig();
+    const section = interaction.options.getString('section');
 
-      if (section) {
-        // Show specific section
-        const sectionData = config[section];
-        if (!sectionData) {
-          return await interaction.reply({
-            content: `❌ Section '${section}' not found in config`,
-            ephemeral: true
-          });
-        }
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('⚙️ Bot Configuration')
+      .setFooter({ text: 'Stored in PostgreSQL • Use /config set to modify' })
+      .setTimestamp();
 
-        embed.setDescription(`**${section.toUpperCase()} Configuration**`);
-        embed.addFields({
-          name: 'Settings',
-          value: '```json\n' + JSON.stringify(sectionData, null, 2) + '\n```'
+    if (section) {
+      const sectionData = config[section];
+      if (!sectionData) {
+        return await interaction.reply({
+          content: `❌ Section '${section}' not found in config`,
+          ephemeral: true
         });
-      } else {
-        // Show all sections
-        embed.setDescription('Current bot configuration');
-
-        for (const [key, value] of Object.entries(config)) {
-          const jsonStr = JSON.stringify(value, null, 2);
-          const truncated = jsonStr.length > 1000
-            ? jsonStr.slice(0, 997) + '...'
-            : jsonStr;
-
-          embed.addFields({
-            name: `${key.toUpperCase()}`,
-            value: '```json\n' + truncated + '\n```',
-            inline: false
-          });
-        }
       }
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
-    } catch (err) {
-      await interaction.reply({
-        content: `❌ Failed to load config: ${err.message}`,
-        ephemeral: true
+      embed.setDescription(`**${section.toUpperCase()} Configuration**`);
+      embed.addFields({
+        name: 'Settings',
+        value: '```json\n' + JSON.stringify(sectionData, null, 2) + '\n```'
       });
+    } else {
+      embed.setDescription('Current bot configuration');
+
+      for (const [key, value] of Object.entries(config)) {
+        const jsonStr = JSON.stringify(value, null, 2);
+        const truncated = jsonStr.length > 1000
+          ? jsonStr.slice(0, 997) + '...'
+          : jsonStr;
+
+        embed.addFields({
+          name: `${key.toUpperCase()}`,
+          value: '```json\n' + truncated + '\n```',
+          inline: false
+        });
+      }
+    }
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+  } catch (err) {
+    await interaction.reply({
+      content: `❌ Failed to load config: ${err.message}`,
+      ephemeral: true
+    });
+  }
+}
+
+/**
+ * Handle /config set
+ */
+async function handleSet(interaction) {
+  const path = interaction.options.getString('path');
+  const value = interaction.options.getString('value');
+
+  // Validate section exists
+  const section = path.split('.')[0];
+  if (!VALID_SECTIONS.includes(section)) {
+    return await interaction.reply({
+      content: `❌ Invalid section '${section}'. Valid sections: ${VALID_SECTIONS.join(', ')}`,
+      ephemeral: true
+    });
+  }
+
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const updatedSection = await setConfigValue(path, value);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x57F287)
+      .setTitle('✅ Config Updated')
+      .addFields(
+        { name: 'Path', value: `\`${path}\``, inline: true },
+        { name: 'New Value', value: `\`${JSON.stringify(updatedSection[path.split('.').slice(1)[0]], null, 2) ?? value}\``, inline: true }
+      )
+      .setFooter({ text: 'Changes take effect immediately' })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (err) {
+    const content = `❌ Failed to set config: ${err.message}`;
+    if (interaction.deferred) {
+      await interaction.editReply({ content });
+    } else {
+      await interaction.reply({ content, ephemeral: true });
+    }
+  }
+}
+
+/**
+ * Handle /config reset
+ */
+async function handleReset(interaction) {
+  const section = interaction.options.getString('section');
+
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    await resetConfig(section || undefined);
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFEE75C)
+      .setTitle('🔄 Config Reset')
+      .setDescription(
+        section
+          ? `Section **${section}** has been reset to defaults from config.json.`
+          : 'All configuration has been reset to defaults from config.json.'
+      )
+      .setFooter({ text: 'Changes take effect immediately' })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (err) {
+    const content = `❌ Failed to reset config: ${err.message}`;
+    if (interaction.deferred) {
+      await interaction.editReply({ content });
+    } else {
+      await interaction.reply({ content, ephemeral: true });
     }
   }
 }

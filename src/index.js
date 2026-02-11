@@ -17,7 +17,8 @@ import { readdirSync, writeFileSync, readFileSync, existsSync, mkdirSync } from 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { info, warn, error } from './logger.js';
-import { loadConfig } from './modules/config.js';
+import { initDb, closeDb } from './db.js';
+import { loadConfig, getConfig } from './modules/config.js';
 import { registerEventHandlers } from './modules/events.js';
 import { HealthMonitor } from './utils/health.js';
 import { registerCommands } from './utils/registerCommands.js';
@@ -35,8 +36,8 @@ const statePath = join(dataDir, 'state.json');
 // Load environment variables
 dotenvConfig();
 
-// Load configuration
-const config = loadConfig();
+// Config is loaded asynchronously after DB init (see startup below)
+let config = {};
 
 // Initialize Discord client with required intents
 const client = new Client({
@@ -138,8 +139,7 @@ async function loadCommands() {
   }
 }
 
-// Register all event handlers
-registerEventHandlers(client, config, healthMonitor);
+// Event handlers are registered after config loads (see startup below)
 
 // Extend ready handler to register slash commands
 client.once('clientReady', async () => {
@@ -159,8 +159,21 @@ client.once('clientReady', async () => {
   }
 });
 
-// Handle slash commands
+// Handle slash commands and autocomplete
 client.on('interactionCreate', async (interaction) => {
+  // Handle autocomplete
+  if (interaction.isAutocomplete()) {
+    const command = client.commands.get(interaction.commandName);
+    if (command?.autocomplete) {
+      try {
+        await command.autocomplete(interaction);
+      } catch (err) {
+        error('Autocomplete error', { command: interaction.commandName, error: err.message });
+      }
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const { commandName, member } = interaction;
@@ -234,11 +247,15 @@ async function gracefulShutdown(signal) {
   info('Saving conversation state');
   saveState();
 
-  // 3. Destroy Discord client
+  // 3. Close database pool
+  info('Closing database connection');
+  await closeDb();
+
+  // 4. Destroy Discord client
   info('Disconnecting from Discord');
   client.destroy();
 
-  // 4. Log clean exit
+  // 5. Log clean exit
   info('Shutdown complete');
   process.exit(0);
 }
@@ -271,13 +288,40 @@ if (!token) {
   process.exit(1);
 }
 
-// Load previous state on startup
-loadState();
+/**
+ * Main startup sequence
+ * 1. Initialize database
+ * 2. Load config from DB (seeds from config.json if empty)
+ * 3. Load previous conversation state
+ * 4. Register event handlers with live config
+ * 5. Load commands
+ * 6. Login to Discord
+ */
+async function startup() {
+  // Initialize database
+  if (process.env.DATABASE_URL) {
+    await initDb();
+    info('Database initialized');
+  } else {
+    warn('DATABASE_URL not set — using config.json only (no persistence)');
+  }
 
-// Load commands and login
-loadCommands()
-  .then(() => client.login(token))
-  .catch((err) => {
-    error('Startup failed', { error: err.message });
-    process.exit(1);
-  });
+  // Load config (from DB if available, else config.json)
+  config = await loadConfig();
+  info('Configuration loaded', { sections: Object.keys(config) });
+
+  // Load previous conversation state
+  loadState();
+
+  // Register event handlers with live config reference
+  registerEventHandlers(client, config, healthMonitor);
+
+  // Load commands and login
+  await loadCommands();
+  await client.login(token);
+}
+
+startup().catch((err) => {
+  error('Startup failed', { error: err.message, stack: err.stack });
+  process.exit(1);
+});
