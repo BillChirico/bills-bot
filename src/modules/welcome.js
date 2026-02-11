@@ -231,7 +231,7 @@ function buildVibeLine(snapshot, suggestedChannels) {
     case 'busy':
       return hasChannels
         ? `Good timing: chat is active (${snapshot.messageCount} messages recently), especially in ${channelText}.`
-        : `Good timing: the server is active right now (${snapshot.messageCount} messages recently, ${snapshot.voiceParticipants} in voice).`;
+        : `Good timing: the server is active right now (${snapshot.messageCount} messages recently${snapshot.voiceParticipants > 0 ? `, ${snapshot.voiceParticipants} in voice` : ''}).`;
     case 'steady':
       return hasChannels
         ? `Things are moving at a healthy pace in ${channelText}, so you'll fit right in.`
