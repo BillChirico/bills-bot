@@ -64,6 +64,11 @@ export const adminOnly = true;
  */
 function collectConfigPaths(source, prefix = '', paths = []) {
   if (Array.isArray(source)) {
+    // Emit path for empty arrays so they're discoverable in autocomplete
+    if (source.length === 0 && prefix) {
+      paths.push(prefix);
+      return paths;
+    }
     source.forEach((value, index) => {
       const path = prefix ? `${prefix}.${index}` : String(index);
       if (value && typeof value === 'object') {
@@ -76,6 +81,12 @@ function collectConfigPaths(source, prefix = '', paths = []) {
   }
 
   if (!source || typeof source !== 'object') {
+    return paths;
+  }
+
+  // Emit path for empty objects so they're discoverable in autocomplete
+  if (Object.keys(source).length === 0 && prefix) {
+    paths.push(prefix);
     return paths;
   }
 
