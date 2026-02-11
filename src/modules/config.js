@@ -230,7 +230,7 @@ export async function resetConfig(section) {
 
     // Mutate in-place so references stay valid (deep clone to avoid shared refs)
     const sectionData = configCache[section];
-    if (sectionData && typeof sectionData === 'object') {
+    if (sectionData && typeof sectionData === 'object' && !Array.isArray(sectionData)) {
       for (const key of Object.keys(sectionData)) delete sectionData[key];
       Object.assign(sectionData, structuredClone(fileConfig[section]));
     } else {
