@@ -251,7 +251,7 @@ export async function resetConfig(section) {
         }
         await client.query('COMMIT');
       } catch (txErr) {
-        await client.query('ROLLBACK');
+        try { await client.query('ROLLBACK'); } catch { /* ignore rollback failure */ }
         throw txErr;
       } finally {
         client.release();
