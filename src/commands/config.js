@@ -157,6 +157,12 @@ export async function execute(interaction) {
     case 'reset':
       await handleReset(interaction);
       break;
+    default:
+      await interaction.reply({
+        content: `❌ Unknown subcommand: \`${subcommand}\``,
+        ephemeral: true
+      });
+      break;
   }
 }
 
