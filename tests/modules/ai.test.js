@@ -79,6 +79,44 @@ describe('ai module', () => {
       expect(history.length).toBe(1);
       expect(history[0]).toEqual({ role: 'user', content: 'hello' });
     });
+
+    it('should hydrate DB history in-place when concurrent messages are added', async () => {
+      let resolveHydration;
+      const hydrationPromise = new Promise((resolve) => {
+        resolveHydration = resolve;
+      });
+
+      const mockQuery = vi
+        .fn()
+        .mockImplementationOnce(() => hydrationPromise)
+        .mockResolvedValue({});
+      const mockPool = { query: mockQuery };
+      setPool(mockPool);
+
+      const historyRef = getHistory('race-channel');
+      expect(historyRef).toEqual([]);
+
+      // Add a message while DB hydration is still pending
+      addToHistory('race-channel', 'user', 'concurrent message');
+
+      // DB returns newest-first; getHistory() reverses into chronological order
+      resolveHydration({
+        rows: [
+          { role: 'assistant', content: 'db reply' },
+          { role: 'user', content: 'db message' },
+        ],
+      });
+
+      await hydrationPromise;
+      await Promise.resolve(); // flush .then callback
+
+      expect(historyRef).toEqual([
+        { role: 'user', content: 'db message' },
+        { role: 'assistant', content: 'db reply' },
+        { role: 'user', content: 'concurrent message' },
+      ]);
+      expect(getHistory('race-channel')).toBe(historyRef);
+    });
   });
 
   describe('addToHistory', () => {
@@ -169,8 +207,8 @@ describe('ai module', () => {
       // DB returns newest-first (ORDER BY created_at DESC)
       const mockQuery = vi.fn().mockResolvedValue({
         rows: [
-          { role: 'assistant', content: 'response', username: null },
-          { role: 'user', content: 'from db', username: 'user1' },
+          { role: 'assistant', content: 'response' },
+          { role: 'user', content: 'from db' },
         ],
       });
       const mockPool = { query: mockQuery };
@@ -182,7 +220,7 @@ describe('ai module', () => {
       expect(history[0].content).toBe('from db');
       expect(history[1].content).toBe('response');
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT role, content, username FROM conversations'),
+        expect.stringContaining('SELECT role, content FROM conversations'),
         ['ch-new', 20],
       );
     });
@@ -224,21 +262,14 @@ describe('ai module', () => {
     });
 
     it('should load messages from DB for all channels', async () => {
-      // DB returns newest-first (ORDER BY created_at DESC)
-      const mockQuery = vi
-        .fn()
-        .mockResolvedValueOnce({
-          rows: [{ channel_id: 'ch1' }, { channel_id: 'ch2' }],
-        })
-        .mockResolvedValueOnce({
-          rows: [
-            { role: 'assistant', content: 'reply1' },
-            { role: 'user', content: 'msg1' },
-          ],
-        })
-        .mockResolvedValueOnce({
-          rows: [{ role: 'user', content: 'msg2' }],
-        });
+      // Single ROW_NUMBER() query returns rows per-channel in chronological order
+      const mockQuery = vi.fn().mockResolvedValueOnce({
+        rows: [
+          { channel_id: 'ch1', role: 'user', content: 'msg1' },
+          { channel_id: 'ch1', role: 'assistant', content: 'reply1' },
+          { channel_id: 'ch2', role: 'user', content: 'msg2' },
+        ],
+      });
 
       const mockPool = { query: mockQuery };
       setPool(mockPool);
@@ -247,12 +278,15 @@ describe('ai module', () => {
 
       const ch1 = getHistory('ch1');
       expect(ch1.length).toBe(2);
-      // After reversing, oldest (msg1) comes first
+      // Rows are already chronological per channel: msg1 then reply1
       expect(ch1[0].content).toBe('msg1');
+      expect(ch1[1].content).toBe('reply1');
 
       const ch2 = getHistory('ch2');
       expect(ch2.length).toBe(1);
 
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('ROW_NUMBER()'), [20]);
       expect(info).toHaveBeenCalledWith(
         'Conversation history hydrated from DB',
         expect.objectContaining({ channels: 2, totalMessages: 3 }),
@@ -271,7 +305,7 @@ describe('ai module', () => {
       );
     });
 
-    it('should handle empty channels list', async () => {
+    it('should handle empty result set', async () => {
       const mockQuery = vi.fn().mockResolvedValue({ rows: [] });
       const mockPool = { query: mockQuery };
       setPool(mockPool);
@@ -476,7 +510,7 @@ describe('ai module', () => {
       expect(history[1].content).toBe('Reply');
     });
 
-    it('should include Authorization header when token is set', async () => {
+    it('should include correct headers in fetch request', async () => {
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
