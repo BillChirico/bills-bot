@@ -256,8 +256,10 @@ async function handleView(interaction) {
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
   } catch (err) {
+    const safeMessage =
+      process.env.NODE_ENV === 'production' ? 'An internal error occurred.' : err.message;
     await interaction.reply({
-      content: `❌ Failed to load config: ${err.message}`,
+      content: `❌ Failed to load config: ${safeMessage}`,
       ephemeral: true,
     });
   }
@@ -308,7 +310,9 @@ async function handleSet(interaction) {
 
     await interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    const content = `❌ Failed to set config: ${err.message}`;
+    const safeMessage =
+      process.env.NODE_ENV === 'production' ? 'An internal error occurred.' : err.message;
+    const content = `❌ Failed to set config: ${safeMessage}`;
     if (interaction.deferred) {
       await interaction.editReply({ content });
     } else {
@@ -333,7 +337,7 @@ async function handleReset(interaction) {
       .setTitle('🔄 Config Reset')
       .setDescription(
         section
-          ? `Section **${section}** has been reset to defaults from config.json.`
+          ? `Section **${escapeInlineCode(section)}** has been reset to defaults from config.json.`
           : 'All configuration has been reset to defaults from config.json.',
       )
       .setFooter({ text: 'Changes take effect immediately' })
@@ -341,7 +345,9 @@ async function handleReset(interaction) {
 
     await interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    const content = `❌ Failed to reset config: ${err.message}`;
+    const safeMessage =
+      process.env.NODE_ENV === 'production' ? 'An internal error occurred.' : err.message;
+    const content = `❌ Failed to reset config: ${safeMessage}`;
     if (interaction.deferred) {
       await interaction.editReply({ content });
     } else {
