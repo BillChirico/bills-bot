@@ -146,8 +146,18 @@ export async function setConfigValue(path, value) {
   // Reads the current row, applies the change in JS (handles arbitrary nesting),
   // then writes back — safe because the row is locked for the duration.
   let dbPersisted = false;
+
+  // Separate pool acquisition from transaction work so we can distinguish
+  // "DB not configured" (graceful fallback) from real transaction errors (must surface).
+  let pool;
   try {
-    const pool = getPool();
+    pool = getPool();
+  } catch {
+    // DB not initialized — skip persistence, fall through to in-memory update
+    logError('Database not initialized for config write — updating in-memory only');
+  }
+
+  if (pool) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -181,8 +191,6 @@ export async function setConfigValue(path, value) {
     } finally {
       client.release();
     }
-  } catch (err) {
-    logError('Database unavailable for config write — updating in-memory only', { error: err.message });
   }
 
   // Update in-memory cache (mutate in-place for reference propagation)
