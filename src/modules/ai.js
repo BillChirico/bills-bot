@@ -1,13 +1,88 @@
 /**
  * AI Module
  * Handles AI chat functionality powered by Claude via OpenClaw
+ * Conversation history is persisted to PostgreSQL with in-memory cache
  */
 
-import { info, warn } from '../logger.js';
+import { info, error as logError, warn as logWarn } from '../logger.js';
+import { getConfig } from './config.js';
 
-// Conversation history per channel (simple in-memory store)
+// Conversation history per channel (in-memory cache)
 let conversationHistory = new Map();
-const MAX_HISTORY = 20;
+
+/** Default history length if not configured */
+const DEFAULT_HISTORY_LENGTH = 20;
+
+/** Default TTL in days for conversation cleanup */
+const DEFAULT_HISTORY_TTL_DAYS = 30;
+
+/** Cleanup interval: 6 hours in milliseconds */
+const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/** Reference to the cleanup interval timer */
+let cleanupTimer = null;
+
+/**
+ * Get the configured history length from config
+ * @returns {number} History length
+ */
+function getHistoryLength() {
+  try {
+    const config = getConfig();
+    const len = config?.ai?.historyLength;
+    if (typeof len === 'number' && len > 0) return len;
+  } catch {
+    // Config not loaded yet, use default
+  }
+  return DEFAULT_HISTORY_LENGTH;
+}
+
+/**
+ * Get the configured TTL days from config
+ * @returns {number} TTL in days
+ */
+function getHistoryTTLDays() {
+  try {
+    const config = getConfig();
+    const ttl = config?.ai?.historyTTLDays;
+    if (typeof ttl === 'number' && ttl > 0) return ttl;
+  } catch {
+    // Config not loaded yet, use default
+  }
+  return DEFAULT_HISTORY_TTL_DAYS;
+}
+
+// Use a lazy-loaded pool getter to avoid import issues
+let _getPoolFn = null;
+
+/**
+ * Set the pool getter function (for dependency injection / testing)
+ * @param {Function} fn - Function that returns the pool or null
+ */
+export function _setPoolGetter(fn) {
+  _getPoolFn = fn;
+}
+
+/**
+ * Get the database pool safely
+ * @returns {import('pg').Pool|null}
+ */
+function getPool() {
+  if (_getPoolFn) return _getPoolFn();
+  return _poolRef;
+}
+
+/** @type {import('pg').Pool|null} */
+let _poolRef = null;
+
+/**
+ * Initialize the pool reference for the AI module
+ * Called during startup after DB is initialized
+ * @param {import('pg').Pool|null} pool
+ */
+export function setPool(pool) {
+  _poolRef = pool;
+}
 
 /**
  * Get the full conversation history map (for state persistence)
@@ -25,35 +100,243 @@ export function setConversationHistory(history) {
   conversationHistory = history;
 }
 
-// OpenClaw API endpoint (exported for shared use by other modules)
-export const OPENCLAW_URL = process.env.OPENCLAW_URL || 'http://localhost:18789/v1/chat/completions';
-export const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
+// OpenClaw API endpoint/token (exported for shared use by other modules)
+export const OPENCLAW_URL =
+  process.env.OPENCLAW_API_URL ||
+  process.env.OPENCLAW_URL ||
+  'http://localhost:18789/v1/chat/completions';
+export const OPENCLAW_TOKEN = process.env.OPENCLAW_API_KEY || process.env.OPENCLAW_TOKEN || '';
 
 /**
  * Get or create conversation history for a channel
+ * Falls back to DB on cache miss, returns in-memory cache otherwise
  * @param {string} channelId - Channel ID
  * @returns {Array} Conversation history
  */
 export function getHistory(channelId) {
   if (!conversationHistory.has(channelId)) {
     conversationHistory.set(channelId, []);
+
+    // Best-effort async DB fallback on cache miss (non-blocking)
+    const pool = getPool();
+    if (pool) {
+      const limit = getHistoryLength();
+      pool
+        .query(
+          `SELECT role, content, username FROM conversations
+           WHERE channel_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2`,
+          [channelId, limit],
+        )
+        .then(({ rows }) => {
+          if (rows.length > 0) {
+            const history = rows.reverse().map((row) => ({ role: row.role, content: row.content }));
+            conversationHistory.set(channelId, history);
+            info('Hydrated history from DB for channel', { channelId, count: history.length });
+          }
+        })
+        .catch((err) => {
+          logWarn('Failed to load history from DB, using in-memory only', {
+            channelId,
+            error: err.message,
+          });
+        });
+    }
   }
   return conversationHistory.get(channelId);
 }
 
 /**
+ * Async version of getHistory that can hydrate from DB on cache miss
+ * @param {string} channelId - Channel ID
+ * @returns {Promise<Array>} Conversation history
+ */
+export async function getHistoryAsync(channelId) {
+  if (conversationHistory.has(channelId)) {
+    return conversationHistory.get(channelId);
+  }
+
+  // Try to load from DB
+  const pool = getPool();
+  if (pool) {
+    try {
+      const limit = getHistoryLength();
+      const { rows } = await pool.query(
+        `SELECT role, content, username FROM conversations
+         WHERE channel_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [channelId, limit],
+      );
+
+      if (rows.length > 0) {
+        // Rows come back newest-first, reverse for chronological order
+        const history = rows.reverse().map((row) => ({
+          role: row.role,
+          content: row.content,
+        }));
+        conversationHistory.set(channelId, history);
+        info('Hydrated history from DB for channel', { channelId, count: history.length });
+        return history;
+      }
+    } catch (err) {
+      logWarn('Failed to load history from DB, using empty cache', {
+        channelId,
+        error: err.message,
+      });
+    }
+  }
+
+  conversationHistory.set(channelId, []);
+  return conversationHistory.get(channelId);
+}
+
+/**
  * Add message to conversation history
+ * Writes to both in-memory cache and DB (write-through)
  * @param {string} channelId - Channel ID
  * @param {string} role - Message role (user/assistant)
  * @param {string} content - Message content
+ * @param {string} [username] - Optional username
  */
-export function addToHistory(channelId, role, content) {
-  const history = getHistory(channelId);
+export function addToHistory(channelId, role, content, username) {
+  if (!conversationHistory.has(channelId)) {
+    conversationHistory.set(channelId, []);
+  }
+  const history = conversationHistory.get(channelId);
   history.push({ role, content });
 
-  // Trim old messages
-  while (history.length > MAX_HISTORY) {
+  const maxHistory = getHistoryLength();
+
+  // Trim old messages from in-memory cache
+  while (history.length > maxHistory) {
     history.shift();
+  }
+
+  // Write-through to DB (fire-and-forget, don't block)
+  const pool = getPool();
+  if (pool) {
+    pool
+      .query(
+        `INSERT INTO conversations (channel_id, role, content, username)
+       VALUES ($1, $2, $3, $4)`,
+        [channelId, role, content, username || null],
+      )
+      .catch((err) => {
+        logWarn('Failed to persist message to DB', {
+          channelId,
+          error: err.message,
+        });
+      });
+  }
+}
+
+/**
+ * Initialize conversation history from DB on startup
+ * Loads last N messages per active channel
+ * @returns {Promise<void>}
+ */
+export async function initConversationHistory() {
+  const pool = getPool();
+  if (!pool) {
+    info('No DB available, skipping conversation history hydration');
+    return;
+  }
+
+  try {
+    const limit = getHistoryLength();
+
+    // Get distinct channels that have conversations
+    const { rows: channels } = await pool.query('SELECT DISTINCT channel_id FROM conversations');
+
+    let totalMessages = 0;
+
+    for (const { channel_id: channelId } of channels) {
+      const { rows } = await pool.query(
+        `SELECT role, content FROM conversations
+         WHERE channel_id = $1
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [channelId, limit],
+      );
+
+      if (rows.length > 0) {
+        const history = rows.reverse().map((row) => ({
+          role: row.role,
+          content: row.content,
+        }));
+        conversationHistory.set(channelId, history);
+        totalMessages += history.length;
+      }
+    }
+
+    info('Conversation history hydrated from DB', {
+      channels: channels.length,
+      totalMessages,
+    });
+  } catch (err) {
+    logWarn('Failed to hydrate conversation history from DB', {
+      error: err.message,
+    });
+  }
+}
+
+/**
+ * Start periodic cleanup of old conversation messages
+ * Deletes messages older than ai.historyTTLDays from the DB
+ */
+export function startConversationCleanup() {
+  // Only run if we have a DB
+  const pool = getPool();
+  if (!pool) {
+    info('No DB available, skipping conversation cleanup scheduler');
+    return;
+  }
+
+  // Run cleanup immediately once, then on interval
+  runCleanup();
+  cleanupTimer = setInterval(runCleanup, CLEANUP_INTERVAL_MS);
+  info('Conversation cleanup scheduler started', {
+    intervalHours: CLEANUP_INTERVAL_MS / (60 * 60 * 1000),
+  });
+}
+
+/**
+ * Stop the periodic cleanup timer
+ */
+export function stopConversationCleanup() {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+    info('Conversation cleanup scheduler stopped');
+  }
+}
+
+/**
+ * Run a single cleanup pass
+ * @returns {Promise<void>}
+ */
+async function runCleanup() {
+  const pool = getPool();
+  if (!pool) return;
+
+  try {
+    const ttlDays = getHistoryTTLDays();
+    const result = await pool.query(
+      `DELETE FROM conversations
+       WHERE created_at < NOW() - INTERVAL '1 day' * $1`,
+      [ttlDays],
+    );
+
+    if (result.rowCount > 0) {
+      info('Cleaned up old conversation messages', {
+        deleted: result.rowCount,
+        ttlDays,
+      });
+    }
+  } catch (err) {
+    logWarn('Conversation cleanup failed', { error: err.message });
   }
 }
 
@@ -66,10 +349,18 @@ export function addToHistory(channelId, role, content) {
  * @param {Object} healthMonitor - Health monitor instance (optional)
  * @returns {Promise<string>} AI response
  */
-export async function generateResponse(channelId, userMessage, username, config, healthMonitor = null) {
-  const history = getHistory(channelId);
+export async function generateResponse(
+  channelId,
+  userMessage,
+  username,
+  config,
+  healthMonitor = null,
+) {
+  const history = await getHistoryAsync(channelId);
 
-  const systemPrompt = config.ai?.systemPrompt || `You are Volvox Bot, a helpful and friendly Discord bot for the Volvox developer community.
+  const systemPrompt =
+    config.ai?.systemPrompt ||
+    `You are Volvox Bot, a helpful and friendly Discord bot for the Volvox developer community.
 You're witty, knowledgeable about programming and tech, and always eager to help.
 Keep responses concise and Discord-friendly (under 2000 chars).
 You can use Discord markdown formatting.`;
@@ -78,7 +369,7 @@ You can use Discord markdown formatting.`;
   const messages = [
     { role: 'system', content: systemPrompt },
     ...history,
-    { role: 'user', content: `${username}: ${userMessage}` }
+    { role: 'user', content: `${username}: ${userMessage}` },
   ];
 
   // Log incoming AI request
@@ -89,7 +380,7 @@ You can use Discord markdown formatting.`;
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(OPENCLAW_TOKEN && { 'Authorization': `Bearer ${OPENCLAW_TOKEN}` })
+        ...(OPENCLAW_TOKEN && { Authorization: `Bearer ${OPENCLAW_TOKEN}` }),
       },
       body: JSON.stringify({
         model: config.ai?.model || 'claude-sonnet-4-20250514',
@@ -106,7 +397,7 @@ You can use Discord markdown formatting.`;
     }
 
     const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || "I got nothing. Try again?";
+    const reply = data.choices?.[0]?.message?.content || 'I got nothing. Try again?';
 
     // Log AI response
     info('AI response', { channelId, username, response: reply.substring(0, 500) });
@@ -117,13 +408,13 @@ You can use Discord markdown formatting.`;
       healthMonitor.setAPIStatus('ok');
     }
 
-    // Update history
-    addToHistory(channelId, 'user', `${username}: ${userMessage}`);
+    // Update history with username for DB persistence
+    addToHistory(channelId, 'user', `${username}: ${userMessage}`, username);
     addToHistory(channelId, 'assistant', reply);
 
     return reply;
   } catch (err) {
-    console.error('OpenClaw API error:', err.message);
+    logError('OpenClaw API error', { error: err.message });
     if (healthMonitor) {
       healthMonitor.setAPIStatus('error');
     }

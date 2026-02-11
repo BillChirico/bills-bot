@@ -96,6 +96,22 @@ export async function initDb() {
         )
       `);
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS conversations (
+          id SERIAL PRIMARY KEY,
+          channel_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          username TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_conversations_channel_created
+        ON conversations (channel_id, created_at)
+      `);
+
       info('Database schema initialized');
     } catch (err) {
       // Clean up the pool so getPool() doesn't return an unusable instance
