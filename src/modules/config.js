@@ -122,7 +122,7 @@ export function getConfig() {
  * Persists to database and updates in-memory cache
  * @param {string} path - Dot-notation path (e.g., "ai.model")
  * @param {*} value - Value to set (automatically parsed from string)
- * @returns {Promise<Object>} Updated section config
+ * @returns {Promise<{section: Object, dbPersisted: boolean}>} Updated section config and persistence status
  */
 export async function setConfigValue(path, value) {
   const parts = path.split('.');
@@ -134,27 +134,25 @@ export async function setConfigValue(path, value) {
   validatePathSegments(parts);
 
   const section = parts[0];
-  const finalKey = parts[parts.length - 1];
   const parsedVal = parseValue(value);
 
   // Deep clone the section for the INSERT case (new section that doesn't exist yet)
   const sectionClone = structuredClone(configCache[section] || {});
-  let current = sectionClone;
-  for (let i = 1; i < parts.length - 1; i++) {
-    if (current[parts[i]] === undefined || typeof current[parts[i]] !== 'object') {
-      current[parts[i]] = {};
-    }
-    current = current[parts[i]];
-  }
-  current[finalKey] = parsedVal;
+  setNestedValue(sectionClone, parts, parsedVal);
 
   // Write to database first, then update cache.
   // Uses a transaction with row lock to prevent concurrent writes from clobbering.
   // Reads the current row, applies the change in JS (handles arbitrary nesting),
   // then writes back — safe because the row is locked for the duration.
   let dbPersisted = false;
+  let pool = null;
   try {
-    const pool = getPool();
+    pool = getPool();
+  } catch {
+    logError('Database unavailable for config write — updating in-memory only');
+  }
+
+  if (pool) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -167,14 +165,7 @@ export async function setConfigValue(path, value) {
       if (rows.length > 0) {
         // Row exists — merge change into the live DB value
         const dbSection = rows[0].value;
-        let node = dbSection;
-        for (let i = 1; i < parts.length - 1; i++) {
-          if (node[parts[i]] === undefined || typeof node[parts[i]] !== 'object') {
-            node[parts[i]] = {};
-          }
-          node = node[parts[i]];
-        }
-        node[finalKey] = parsedVal;
+        setNestedValue(dbSection, parts, parsedVal);
 
         await client.query(
           'UPDATE config SET value = $1, updated_at = NOW() WHERE key = $2',
@@ -195,25 +186,16 @@ export async function setConfigValue(path, value) {
     } finally {
       client.release();
     }
-  } catch (err) {
-    logError('Database unavailable for config write — updating in-memory only', { error: err.message });
   }
 
   // Update in-memory cache (mutate in-place for reference propagation)
   if (!configCache[section] || typeof configCache[section] !== 'object') {
     configCache[section] = {};
   }
-  let target = configCache[section];
-  for (let i = 1; i < parts.length - 1; i++) {
-    if (target[parts[i]] === undefined || typeof target[parts[i]] !== 'object') {
-      target[parts[i]] = {};
-    }
-    target = target[parts[i]];
-  }
-  target[finalKey] = parsedVal;
+  setNestedValue(configCache[section], parts, parsedVal);
 
   info('Config updated', { path, value: parsedVal, persisted: dbPersisted });
-  return configCache[section];
+  return { section: configCache[section], dbPersisted };
 }
 
 /**
@@ -326,6 +308,24 @@ function validatePathSegments(segments) {
  */
 function isPlainObject(val) {
   return typeof val === 'object' && val !== null && !Array.isArray(val);
+}
+
+/**
+ * Set a value at a nested path within an object, creating intermediate objects as needed.
+ * @param {Object} root - The root object to modify
+ * @param {string[]} parts - Path segments (index 0 is skipped, assumes it's the section name)
+ * @param {*} value - The value to set at the final path segment
+ */
+function setNestedValue(root, parts, value) {
+  const finalKey = parts[parts.length - 1];
+  let current = root;
+  for (let i = 1; i < parts.length - 1; i++) {
+    if (current[parts[i]] === undefined || typeof current[parts[i]] !== 'object') {
+      current[parts[i]] = {};
+    }
+    current = current[parts[i]];
+  }
+  current[finalKey] = value;
 }
 
 /**

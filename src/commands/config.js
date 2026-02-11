@@ -225,19 +225,19 @@ async function handleSet(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
 
-    const updatedSection = await setConfigValue(path, value);
+    const { section: updatedSection, dbPersisted } = await setConfigValue(path, value);
 
     // Traverse to the actual leaf value for display
     const leafValue = path.split('.').slice(1).reduce((obj, k) => obj?.[k], updatedSection);
 
     const embed = new EmbedBuilder()
-      .setColor(0x57F287)
-      .setTitle('✅ Config Updated')
+      .setColor(dbPersisted ? 0x57F287 : 0xFEE75C)
+      .setTitle(dbPersisted ? '✅ Config Updated' : '⚠️ Config Updated (In-Memory Only)')
       .addFields(
         { name: 'Path', value: `\`${path}\``, inline: true },
         { name: 'New Value', value: `\`${JSON.stringify(leafValue, null, 2) ?? value}\``, inline: true }
       )
-      .setFooter({ text: 'Changes take effect immediately' })
+      .setFooter({ text: dbPersisted ? 'Changes take effect immediately' : 'Warning: Change will be lost on restart (database unavailable)' })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
