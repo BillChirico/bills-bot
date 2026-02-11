@@ -185,7 +185,7 @@ async function handleView(interaction) {
       embed.setDescription('Current bot configuration');
 
       // Track cumulative embed size to stay under Discord's 6000-char limit
-      let totalLength = embed.data.title.length + embed.data.description.length;
+      let totalLength = (embed.data.title?.length || 0) + (embed.data.description?.length || 0);
       let truncated = false;
 
       for (const [key, value] of Object.entries(config)) {
