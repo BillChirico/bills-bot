@@ -331,6 +331,37 @@ describe('ai module', () => {
       );
     });
 
+    it('should replace existing channel history when hydrating from DB', async () => {
+      // Simulate startup state loaded from file persistence
+      setConversationHistory(
+        new Map([
+          [
+            'ch1',
+            [
+              { role: 'user', content: 'stale-file-msg' },
+              { role: 'assistant', content: 'stale-file-reply' },
+            ],
+          ],
+        ]),
+      );
+
+      const mockQuery = vi.fn().mockResolvedValueOnce({
+        rows: [
+          { channel_id: 'ch1', role: 'user', content: 'db-msg' },
+          { channel_id: 'ch1', role: 'assistant', content: 'db-reply' },
+        ],
+      });
+      const mockPool = { query: mockQuery };
+      setPool(mockPool);
+
+      await initConversationHistory();
+
+      expect(getHistory('ch1')).toEqual([
+        { role: 'user', content: 'db-msg' },
+        { role: 'assistant', content: 'db-reply' },
+      ]);
+    });
+
     it('should handle DB errors gracefully during hydration', async () => {
       const mockQuery = vi.fn().mockRejectedValue(new Error('DB down'));
       const mockPool = { query: mockQuery };

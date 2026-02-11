@@ -295,26 +295,33 @@ export async function initConversationHistory() {
     );
 
     // Group rows by channel_id
-    const channelSet = new Set();
-    let totalMessages = 0;
+    const hydratedByChannel = new Map();
 
     for (const row of rows) {
       const channelId = row.channel_id;
-      channelSet.add(channelId);
-
-      if (!conversationHistory.has(channelId)) {
-        conversationHistory.set(channelId, []);
+      if (!hydratedByChannel.has(channelId)) {
+        hydratedByChannel.set(channelId, []);
       }
-      conversationHistory.get(channelId).push({
+      hydratedByChannel.get(channelId).push({
         role: row.role,
         content: row.content,
       });
-      totalMessages++;
+    }
+
+    // Replace channel histories with DB snapshots to avoid appending onto
+    // file-loaded state (which causes duplicate growth across restarts).
+    for (const [channelId, hydratedHistory] of hydratedByChannel.entries()) {
+      if (!conversationHistory.has(channelId)) {
+        conversationHistory.set(channelId, []);
+      }
+      const target = conversationHistory.get(channelId);
+      target.length = 0;
+      target.push(...hydratedHistory);
     }
 
     info('Conversation history hydrated from DB', {
-      channels: channelSet.size,
-      totalMessages,
+      channels: hydratedByChannel.size,
+      totalMessages: rows.length,
     });
   } catch (err) {
     logWarn('Failed to hydrate conversation history from DB', {
