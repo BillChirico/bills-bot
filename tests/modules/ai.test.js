@@ -186,6 +186,21 @@ describe('ai module', () => {
     });
 
     it('should include Authorization header when token is set', async () => {
+      vi.resetModules();
+      process.env.OPENCLAW_API_KEY = 'test-key-123';
+
+      vi.mock('../../src/logger.js', () => ({
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      }));
+
+      const { generateResponse: genResponse, setConversationHistory: setHistory } = await import(
+        '../../src/modules/ai.js'
+      );
+      setHistory(new Map());
+
       const mockResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -194,11 +209,12 @@ describe('ai module', () => {
       };
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-      const config = { ai: {} };
-      await generateResponse('ch1', 'Hi', 'user', config);
+      await genResponse('ch1', 'Hi', 'user', { ai: {} });
 
       const fetchCall = globalThis.fetch.mock.calls[0];
-      expect(fetchCall[1].headers['Content-Type']).toBe('application/json');
+      expect(fetchCall[1].headers.Authorization).toBe('Bearer test-key-123');
+
+      delete process.env.OPENCLAW_API_KEY;
     });
   });
 });

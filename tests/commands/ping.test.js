@@ -24,6 +24,25 @@ vi.mock('discord.js', () => {
 
 import { data, execute } from '../../src/commands/ping.js';
 
+/**
+ * Create a mock Discord interaction for ping command tests.
+ * @param {Object} overrides - Properties to override on the default mock
+ * @returns {Object} Mock interaction object
+ */
+function createMockInteraction(overrides = {}) {
+  return {
+    reply: vi.fn().mockResolvedValue({
+      resource: {
+        message: { createdTimestamp: 1000 },
+      },
+    }),
+    createdTimestamp: 900,
+    client: { ws: { ping: 42 } },
+    editReply: vi.fn(),
+    ...overrides,
+  };
+}
+
 describe('ping command', () => {
   it('should export data with name and description', () => {
     expect(data.name).toBe('ping');
@@ -31,17 +50,7 @@ describe('ping command', () => {
   });
 
   it('should reply with pong and latency info', async () => {
-    const mockEditReply = vi.fn();
-    const interaction = {
-      reply: vi.fn().mockResolvedValue({
-        resource: {
-          message: { createdTimestamp: 1000 },
-        },
-      }),
-      createdTimestamp: 900,
-      client: { ws: { ping: 42 } },
-      editReply: mockEditReply,
-    };
+    const interaction = createMockInteraction();
 
     await execute(interaction);
 
@@ -50,8 +59,8 @@ describe('ping command', () => {
       withResponse: true,
     });
 
-    expect(mockEditReply).toHaveBeenCalledWith(expect.stringContaining('Pong'));
-    const editArg = mockEditReply.mock.calls[0][0];
+    expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('Pong'));
+    const editArg = interaction.editReply.mock.calls[0][0];
     expect(editArg).toContain('100ms'); // 1000 - 900
     expect(editArg).toContain('42ms');
   });

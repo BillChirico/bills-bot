@@ -48,7 +48,7 @@ export function classifyError(error, context = {}) {
   const status = error.status || context.status || context.statusCode;
 
   // Network errors
-  if (code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'ETIMEDOUT') {
+  if (code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
     return ErrorType.NETWORK;
   }
   if (code === 'ETIMEDOUT' || message.includes('timeout')) {

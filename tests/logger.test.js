@@ -15,6 +15,9 @@ vi.mock('winston-daily-rotate-file', () => ({
   })),
 }));
 
+// NOTE: Logger module is cached after first import. Tests that need fresh
+// module state use vi.resetModules() before re-importing. Tests sharing
+// the same import get the same winston logger instance.
 describe('logger module', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -56,7 +59,10 @@ describe('logger module', () => {
 
   it('should redact sensitive fields', async () => {
     const logger = await import('../src/logger.js');
-    // This won't throw - just verifying the sensitive data filter works
+    // Spy on console transport to capture actual output after redaction
+    const transport = logger.default.logger.transports[0];
+    const writeSpy = vi.spyOn(transport, 'log').mockImplementation((_info, cb) => cb?.());
+
     logger.info('test', {
       token: 'secret-token',
       DISCORD_TOKEN: 'secret',
@@ -67,6 +73,15 @@ describe('logger module', () => {
         safe: 'visible',
       },
     });
+
+    expect(writeSpy).toHaveBeenCalled();
+    const loggedInfo = writeSpy.mock.calls[0][0];
+    expect(loggedInfo.token).toBe('[REDACTED]');
+    expect(loggedInfo.DISCORD_TOKEN).toBe('[REDACTED]');
+    expect(loggedInfo.password).toBe('[REDACTED]');
+    expect(loggedInfo.apiKey).toBe('[REDACTED]');
+    expect(loggedInfo.nested.token).toBe('[REDACTED]');
+    expect(loggedInfo.nested.safe).toBe('visible');
   });
 
   it('should handle array meta values in filter', async () => {

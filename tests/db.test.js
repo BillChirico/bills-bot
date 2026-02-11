@@ -45,9 +45,15 @@ vi.mock('pg', () => {
 
 describe('db module', () => {
   let dbModule;
+  let originalDatabaseUrl;
+  let originalDatabaseSsl;
 
   beforeEach(async () => {
     vi.resetModules();
+
+    // Save original env vars to restore after each test
+    originalDatabaseUrl = process.env.DATABASE_URL;
+    originalDatabaseSsl = process.env.DATABASE_SSL;
 
     pgMocks.poolConfig = null;
     pgMocks.poolQuery.mockReset().mockResolvedValue({});
@@ -75,8 +81,17 @@ describe('db module', () => {
       // ignore cleanup failures
     }
 
-    delete process.env.DATABASE_URL;
-    delete process.env.DATABASE_SSL;
+    // Restore original env vars
+    if (originalDatabaseUrl !== undefined) {
+      process.env.DATABASE_URL = originalDatabaseUrl;
+    } else {
+      delete process.env.DATABASE_URL;
+    }
+    if (originalDatabaseSsl !== undefined) {
+      process.env.DATABASE_SSL = originalDatabaseSsl;
+    } else {
+      delete process.env.DATABASE_SSL;
+    }
     vi.clearAllMocks();
   });
 

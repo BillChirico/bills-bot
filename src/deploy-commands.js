@@ -14,7 +14,7 @@ import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as dotenvConfig } from 'dotenv';
-import { error as logError } from './logger.js';
+import { error as logError, warn as logWarn } from './logger.js';
 import { registerCommands } from './utils/registerCommands.js';
 
 dotenvConfig();
@@ -45,6 +45,8 @@ async function loadCommands() {
     const command = await import(join(commandsPath, file));
     if (command.data && command.execute) {
       commands.push(command);
+    } else {
+      logWarn(`Skipping ${file}: missing .data or .execute export`);
     }
   }
 

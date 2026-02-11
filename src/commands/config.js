@@ -300,8 +300,8 @@ async function handleSet(interaction) {
       .setColor(0x57f287)
       .setTitle('✅ Config Updated')
       .addFields(
-        { name: 'Path', value: `\`${path}\``, inline: true },
-        { name: 'New Value', value: `\`${truncatedValue}\``, inline: true },
+        { name: 'Path', value: `\`${escapeInlineCode(path)}\``, inline: true },
+        { name: 'New Value', value: `\`${escapeInlineCode(truncatedValue)}\``, inline: true },
       )
       .setFooter({ text: 'Changes take effect immediately' })
       .setTimestamp();

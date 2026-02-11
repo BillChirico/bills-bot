@@ -145,7 +145,7 @@ const consoleFormat = winston.format.printf(
     const prefix = EMOJI_MAP[originalLevel] || '📝';
     const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
 
-    return `${prefix} [${timestamp}] ${level.toUpperCase()}: ${message}${metaStr}`;
+    return `${prefix} [${timestamp}] ${originalLevel.toUpperCase()}: ${message}${metaStr}`;
   },
 );
 

@@ -43,11 +43,11 @@ describe('classifyError', () => {
     expect(classifyError(err)).toBe(ErrorType.NETWORK);
   });
 
-  it('should classify ETIMEDOUT as NETWORK (code check runs first)', () => {
+  it('should classify ETIMEDOUT as TIMEOUT', () => {
     const err = new Error('timed out');
     err.code = 'ETIMEDOUT';
-    // ETIMEDOUT is in the ECONNREFUSED/ENOTFOUND/ETIMEDOUT code check first → NETWORK
-    expect(classifyError(err)).toBe(ErrorType.NETWORK);
+    // ETIMEDOUT removed from NETWORK codes — falls through to TIMEOUT check
+    expect(classifyError(err)).toBe(ErrorType.TIMEOUT);
   });
 
   it('should classify timeout message as TIMEOUT', () => {

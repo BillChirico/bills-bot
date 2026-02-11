@@ -143,7 +143,7 @@ describe('config command', () => {
         );
         // The embed should contain a truncation notice
         const embed = mockReply.mock.calls[0][0].embeds[0];
-        const fields = embed.data.fields;
+        const fields = embed.toJSON().fields;
         const truncatedField = fields.find((f) => f.name === '⚠️ Truncated');
         expect(truncatedField).toBeDefined();
       });
