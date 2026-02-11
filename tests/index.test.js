@@ -88,6 +88,9 @@ vi.mock('discord.js', () => {
   return {
     Client,
     Collection,
+    Events: {
+      ClientReady: 'ready',
+    },
     GatewayIntentBits: {
       Guilds: 1,
       GuildMessages: 2,
@@ -451,7 +454,7 @@ describe('index.js', () => {
 
     mocks.client.commands.set('ping', { data: { name: 'ping' }, execute: vi.fn() });
 
-    await mocks.onceHandlers.clientReady[0]();
+    await mocks.onceHandlers.ready[0]();
 
     expect(mocks.registerCommands).toHaveBeenCalledWith(
       Array.from(mocks.client.commands.values()),
@@ -466,7 +469,7 @@ describe('index.js', () => {
 
     mocks.registerCommands.mockRejectedValueOnce(new Error('register fail'));
 
-    await mocks.onceHandlers.clientReady[0]();
+    await mocks.onceHandlers.ready[0]();
 
     expect(mocks.logger.error).toHaveBeenCalledWith('Command registration failed', {
       error: 'register fail',
