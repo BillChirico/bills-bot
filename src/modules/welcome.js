@@ -210,20 +210,33 @@ function getActivityLevel(messageCount, voiceParticipants) {
  */
 function buildVibeLine(snapshot, suggestedChannels) {
   const topChannels = snapshot.topChannelIds.map(id => `<#${id}>`);
-  const channelText = (topChannels.length ? topChannels : suggestedChannels).slice(0, 2).join(' + ');
+  const channelList = (topChannels.length ? topChannels : suggestedChannels).slice(0, 2);
+  const channelText = channelList.join(' + ');
+  const hasChannels = channelList.length > 0;
 
   switch (snapshot.level) {
     case 'hype':
-      return `The place is buzzing right now - big energy in ${channelText}.`;
+      return hasChannels
+        ? `The place is buzzing right now - big energy in ${channelText}.`
+        : `The place is buzzing right now - big energy everywhere.`;
     case 'busy':
-      return `Good timing: chat is active (${snapshot.messageCount} messages recently), especially in ${channelText}.`;
+      return hasChannels
+        ? `Good timing: chat is active (${snapshot.messageCount} messages recently), especially in ${channelText}.`
+        : `Good timing: the server is active right now (${snapshot.messageCount} messages recently, ${snapshot.voiceParticipants} in voice).`;
     case 'steady':
-      return `Things are moving at a healthy pace in ${channelText}, so you'll fit right in.`;
+      return hasChannels
+        ? `Things are moving at a healthy pace in ${channelText}, so you'll fit right in.`
+        : `Things are moving at a healthy pace, so you'll fit right in.`;
     case 'light':
+      if (snapshot.voiceChannels > 0 && !hasChannels) {
+        return `${snapshot.voiceParticipants} ${snapshot.voiceParticipants === 1 ? 'person is' : 'people are'} hanging out in voice right now — jump in anytime.`;
+      }
       if (snapshot.voiceChannels > 0) {
         return `${snapshot.voiceParticipants} people are hanging out in voice right now, and ${channelText} is waking up.`;
       }
-      return `It's a chill moment, but ${channelText} is where people are checking in.`;
+      return hasChannels
+        ? `It's a chill moment, but ${channelText} is where people are checking in.`
+        : `It's a chill moment — perfect time to say hello.`;
     default:
       return `You're catching us in a quiet window - perfect time to introduce yourself before the chaos starts.`;
   }
