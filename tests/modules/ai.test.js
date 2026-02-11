@@ -80,43 +80,15 @@ describe('ai module', () => {
       expect(history[0]).toEqual({ role: 'user', content: 'hello' });
     });
 
-    it('should hydrate DB history in-place when concurrent messages are added', async () => {
-      let resolveHydration;
-      const hydrationPromise = new Promise((resolve) => {
-        resolveHydration = resolve;
-      });
-
-      const mockQuery = vi
-        .fn()
-        .mockImplementationOnce(() => hydrationPromise)
-        .mockResolvedValue({});
+    it('should not trigger DB hydration (use getHistoryAsync for DB)', () => {
+      const mockQuery = vi.fn().mockResolvedValue({ rows: [] });
       const mockPool = { query: mockQuery };
       setPool(mockPool);
 
-      const historyRef = getHistory('race-channel');
-      expect(historyRef).toEqual([]);
-
-      // Add a message while DB hydration is still pending
-      addToHistory('race-channel', 'user', 'concurrent message');
-
-      // DB returns newest-first; getHistory() reverses into chronological order
-      resolveHydration({
-        rows: [
-          { role: 'assistant', content: 'db reply' },
-          { role: 'user', content: 'db message' },
-        ],
-      });
-
-      await hydrationPromise;
-
-      await vi.waitFor(() => {
-        expect(historyRef).toEqual([
-          { role: 'user', content: 'db message' },
-          { role: 'assistant', content: 'db reply' },
-          { role: 'user', content: 'concurrent message' },
-        ]);
-        expect(getHistory('race-channel')).toBe(historyRef);
-      });
+      const history = getHistory('new-channel-db');
+      expect(history).toEqual([]);
+      // getHistory should NOT trigger any DB queries
+      expect(mockQuery).not.toHaveBeenCalled();
     });
   });
 
@@ -261,37 +233,6 @@ describe('ai module', () => {
       const [h1, h2] = await Promise.all([p1, p2]);
       expect(h1).toBe(h2);
       expect(h1).toEqual([{ role: 'user', content: 'hydrated once' }]);
-    });
-
-    it('should await hydration started by getHistory on cache miss', async () => {
-      let resolveHydration;
-      const mockQuery = vi.fn().mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            resolveHydration = resolve;
-          }),
-      );
-      const mockPool = { query: mockQuery };
-      setPool(mockPool);
-
-      const historyRef = getHistory('ch-sync-first');
-      expect(historyRef).toEqual([]);
-
-      const asyncHistoryPromise = getHistoryAsync('ch-sync-first');
-      const raceResult = await Promise.race([
-        asyncHistoryPromise.then(() => 'hydrated'),
-        Promise.resolve('pending'),
-      ]);
-      expect(raceResult).toBe('pending');
-
-      resolveHydration({
-        rows: [{ role: 'user', content: 'from db' }],
-      });
-
-      const hydratedHistory = await asyncHistoryPromise;
-      expect(mockQuery).toHaveBeenCalledTimes(1);
-      expect(hydratedHistory).toBe(historyRef);
-      expect(hydratedHistory).toEqual([{ role: 'user', content: 'from db' }]);
     });
 
     it('should return empty array when DB has no data', async () => {

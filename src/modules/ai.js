@@ -184,7 +184,7 @@ function hydrateHistory(channelId) {
 
 /**
  * Get or create conversation history for a channel.
- * Returns in-memory history immediately and triggers async hydration on cache miss.
+ * Returns in-memory history immediately; does NOT trigger async DB hydration.
  * Prefer getHistoryAsync when callers need hydrated data before proceeding.
  * @param {string} channelId - Channel ID
  * @returns {Array} Conversation history
@@ -192,8 +192,6 @@ function hydrateHistory(channelId) {
 export function getHistory(channelId) {
   if (!conversationHistory.has(channelId)) {
     conversationHistory.set(channelId, []);
-    // Best-effort async DB fallback on cache miss (non-blocking).
-    void hydrateHistory(channelId);
   }
 
   return conversationHistory.get(channelId);
