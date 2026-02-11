@@ -134,19 +134,12 @@ export async function setConfigValue(path, value) {
   validatePathSegments(parts);
 
   const section = parts[0];
-  const finalKey = parts[parts.length - 1];
+  const nestedParts = parts.slice(1);
   const parsedVal = parseValue(value);
 
   // Deep clone the section for the INSERT case (new section that doesn't exist yet)
   const sectionClone = structuredClone(configCache[section] || {});
-  let current = sectionClone;
-  for (let i = 1; i < parts.length - 1; i++) {
-    if (current[parts[i]] === undefined || typeof current[parts[i]] !== 'object') {
-      current[parts[i]] = {};
-    }
-    current = current[parts[i]];
-  }
-  current[finalKey] = parsedVal;
+  setNestedValue(sectionClone, nestedParts, parsedVal);
 
   // Write to database first, then update cache.
   // Uses a transaction with row lock to prevent concurrent writes from clobbering.
@@ -167,14 +160,7 @@ export async function setConfigValue(path, value) {
       if (rows.length > 0) {
         // Row exists — merge change into the live DB value
         const dbSection = rows[0].value;
-        let node = dbSection;
-        for (let i = 1; i < parts.length - 1; i++) {
-          if (node[parts[i]] === undefined || typeof node[parts[i]] !== 'object') {
-            node[parts[i]] = {};
-          }
-          node = node[parts[i]];
-        }
-        node[finalKey] = parsedVal;
+        setNestedValue(dbSection, nestedParts, parsedVal);
 
         await client.query(
           'UPDATE config SET value = $1, updated_at = NOW() WHERE key = $2',
@@ -203,14 +189,7 @@ export async function setConfigValue(path, value) {
   if (!configCache[section] || typeof configCache[section] !== 'object') {
     configCache[section] = {};
   }
-  let target = configCache[section];
-  for (let i = 1; i < parts.length - 1; i++) {
-    if (target[parts[i]] === undefined || typeof target[parts[i]] !== 'object') {
-      target[parts[i]] = {};
-    }
-    target = target[parts[i]];
-  }
-  target[finalKey] = parsedVal;
+  setNestedValue(configCache[section], nestedParts, parsedVal);
 
   info('Config updated', { path, value: parsedVal, persisted: dbPersisted });
   return configCache[section];
@@ -317,6 +296,23 @@ function validatePathSegments(segments) {
       throw new Error(`Invalid config path: '${segment}' is a reserved key and cannot be used`);
     }
   }
+}
+
+/**
+ * Set a value at a nested path within an object, creating intermediate objects as needed.
+ * @param {Object} root - Target object to modify (the section-level object)
+ * @param {string[]} pathParts - Path segments below the section (e.g., ['model'] for 'ai.model')
+ * @param {*} value - Value to set at the leaf key
+ */
+function setNestedValue(root, pathParts, value) {
+  let current = root;
+  for (let i = 0; i < pathParts.length - 1; i++) {
+    if (current[pathParts[i]] === undefined || typeof current[pathParts[i]] !== 'object') {
+      current[pathParts[i]] = {};
+    }
+    current = current[pathParts[i]];
+  }
+  current[pathParts[pathParts.length - 1]] = value;
 }
 
 /**
