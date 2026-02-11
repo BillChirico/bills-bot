@@ -2,9 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
   "files": {
     "includes": [
-      "src/db.js",
-      "src/index.js",
-      "src/modules/ai.js",
+      "src/**/*.js",
       "tests/**/*.js",
       "!node_modules/**",
       "!coverage/**",

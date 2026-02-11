@@ -131,7 +131,9 @@ export function getHistory(channelId) {
         )
         .then(({ rows }) => {
           if (rows.length > 0) {
-            const dbHistory = rows.reverse().map((row) => ({ role: row.role, content: row.content }));
+            const dbHistory = rows
+              .reverse()
+              .map((row) => ({ role: row.role, content: row.content }));
             // Merge: keep any messages added concurrently via addToHistory
             const current = conversationHistory.get(channelId) || [];
             // DB messages come first, then append any new messages added since cache miss
@@ -139,7 +141,11 @@ export function getHistory(channelId) {
             // Trim to configured limit
             const limit = getHistoryLength();
             conversationHistory.set(channelId, merged.slice(-limit));
-            info('Hydrated history from DB for channel', { channelId, count: dbHistory.length, merged: merged.length });
+            info('Hydrated history from DB for channel', {
+              channelId,
+              count: dbHistory.length,
+              merged: merged.length,
+            });
           }
         })
         .catch((err) => {
