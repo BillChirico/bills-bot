@@ -312,8 +312,14 @@ function setNestedValue(root, pathParts, value) {
     if (DANGEROUS_KEYS.has(pathParts[i])) {
       throw new Error(`Invalid config path segment: '${pathParts[i]}' is a reserved key`);
     }
-    if (current[pathParts[i]] == null || typeof current[pathParts[i]] !== 'object' || Array.isArray(current[pathParts[i]])) {
+    if (current[pathParts[i]] == null || typeof current[pathParts[i]] !== 'object') {
       current[pathParts[i]] = {};
+    } else if (Array.isArray(current[pathParts[i]])) {
+      // Keep arrays intact when the next path segment is a valid numeric index;
+      // otherwise replace with a plain object (legacy behaviour for non-numeric keys).
+      if (!/^\d+$/.test(pathParts[i + 1])) {
+        current[pathParts[i]] = {};
+      }
     }
     current = current[pathParts[i]];
   }
