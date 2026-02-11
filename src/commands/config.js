@@ -95,6 +95,7 @@ export async function autocomplete(interaction) {
 
     const paths = [];
     for (const [section, value] of Object.entries(config)) {
+      if (!VALID_SECTIONS.includes(section)) continue;
       if (typeof value === 'object' && value !== null) {
         paths.push(...flattenConfigKeys(value, section));
       }
