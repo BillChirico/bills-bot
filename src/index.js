@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Client, Collection, GatewayIntentBits } from 'discord.js';
+import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
 import { config as dotenvConfig } from 'dotenv';
 import { closeDb, initDb } from './db.js';
 import { error, info, warn } from './logger.js';
@@ -146,7 +146,7 @@ async function loadCommands() {
 // Event handlers are registered after config loads (see startup below)
 
 // Extend ready handler to register slash commands
-client.once('clientReady', async () => {
+client.once(Events.ClientReady, async () => {
   // Register slash commands with Discord
   try {
     const commands = Array.from(client.commands.values());
