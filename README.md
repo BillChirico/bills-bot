@@ -92,12 +92,17 @@ pnpm dev
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DISCORD_TOKEN` | ✅ | Discord bot token |
-| `CLIENT_ID` | ✅ | Discord application client ID (for slash command registration) |
+| `DISCORD_CLIENT_ID` | ✅* | Discord application/client ID for slash-command deployment (`pnpm deploy`) |
 | `GUILD_ID` | ❌ | Guild ID for faster dev command deployment (omit for global) |
-| `OPENCLAW_URL` | ✅ | OpenClaw chat completions endpoint |
-| `OPENCLAW_TOKEN` | ✅ | OpenClaw gateway authentication token |
-| `DATABASE_URL` | ❌ | PostgreSQL connection string (falls back to config.json if unset) |
+| `OPENCLAW_API_URL` | ✅ | OpenClaw chat completions endpoint |
+| `OPENCLAW_API_KEY` | ✅ | OpenClaw gateway authentication token |
+| `DATABASE_URL` | ✅** | PostgreSQL connection string for persistent config/state |
 | `LOG_LEVEL` | ❌ | Logging level: `debug`, `info`, `warn`, `error` (default: `info`) |
+
+\* Legacy alias supported: `CLIENT_ID`  
+\** Bot can run without DB, but persistent config is strongly recommended in production.
+
+Legacy OpenClaw aliases are also supported for backwards compatibility: `OPENCLAW_URL`, `OPENCLAW_TOKEN`.
 
 ## ⚙️ Configuration
 

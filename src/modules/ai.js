@@ -25,10 +25,14 @@ export function setConversationHistory(history) {
   conversationHistory = history;
 }
 
-// OpenClaw API endpoint (exported for shared use by other modules)
+// OpenClaw API endpoint/token (exported for shared use by other modules)
+// Preferred env vars: OPENCLAW_API_URL + OPENCLAW_API_KEY
+// Backward-compatible aliases: OPENCLAW_URL + OPENCLAW_TOKEN
 export const OPENCLAW_URL =
-  process.env.OPENCLAW_URL || 'http://localhost:18789/v1/chat/completions';
-export const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
+  process.env.OPENCLAW_API_URL ||
+  process.env.OPENCLAW_URL ||
+  'http://localhost:18789/v1/chat/completions';
+export const OPENCLAW_TOKEN = process.env.OPENCLAW_API_KEY || process.env.OPENCLAW_TOKEN || '';
 
 /**
  * Get or create conversation history for a channel

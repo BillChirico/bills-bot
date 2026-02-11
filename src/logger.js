@@ -50,6 +50,7 @@ if (fileOutputEnabled) {
  */
 const SENSITIVE_FIELDS = [
   'DISCORD_TOKEN',
+  'OPENCLAW_API_KEY',
   'OPENCLAW_TOKEN',
   'token',
   'password',

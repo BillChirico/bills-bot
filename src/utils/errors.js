@@ -176,10 +176,10 @@ export function getSuggestedNextSteps(error, context = {}) {
     [ErrorType.API_RATE_LIMIT]: 'Wait 60 seconds before trying again.',
 
     [ErrorType.API_UNAUTHORIZED]:
-      'Check the OPENCLAW_TOKEN environment variable and API credentials.',
+      'Check the OPENCLAW_API_KEY environment variable (or legacy OPENCLAW_TOKEN) and API credentials.',
 
     [ErrorType.API_NOT_FOUND]:
-      'Verify the OPENCLAW_URL environment variable points to the correct endpoint.',
+      'Verify OPENCLAW_API_URL (or legacy OPENCLAW_URL) points to the correct endpoint.',
 
     [ErrorType.API_SERVER_ERROR]:
       'The service should recover automatically. If it persists, restart the AI service.',
