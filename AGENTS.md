@@ -54,7 +54,8 @@
 ### Logging
 
 - **Always use Winston** — `import { info, warn, error } from '../logger.js'`
-- **Never use `console.log`** in src/ files
+- **NEVER use `console.log`, `console.warn`, `console.error`, or any `console.*` method** in src/ files — no exceptions
+- If you see `console.*` in existing code, replace it with the Winston equivalent
 - Pass structured metadata: `info('Message processed', { userId, channelId })`
 
 ### Error Handling
