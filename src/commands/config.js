@@ -64,19 +64,13 @@ export const adminOnly = true;
  */
 function collectConfigPaths(source, prefix = '', paths = []) {
   if (Array.isArray(source)) {
-    // Emit path for empty arrays so they're discoverable in autocomplete
-    if (source.length === 0 && prefix) {
+    // Emit the array path itself, not individual element paths.
+    // Individual element paths (e.g., highlightChannels.0) would be destroyed
+    // by setNestedValue which replaces arrays with empty objects during traversal.
+    // Admins should set arrays as a whole using JSON syntax (e.g., ["id1", "id2"]).
+    if (prefix) {
       paths.push(prefix);
-      return paths;
     }
-    source.forEach((value, index) => {
-      const path = prefix ? `${prefix}.${index}` : String(index);
-      if (value && typeof value === 'object') {
-        collectConfigPaths(value, path, paths);
-      } else {
-        paths.push(path);
-      }
-    });
     return paths;
   }
 
