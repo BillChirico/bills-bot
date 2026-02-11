@@ -3,7 +3,7 @@
  * Handles dynamic welcome messages for new members
  */
 
-import { error as logError, info } from '../logger.js';
+import { info, error as logError } from '../logger.js';
 
 const guildActivity = new Map();
 const DEFAULT_ACTIVITY_WINDOW_MINUTES = 45;

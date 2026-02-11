@@ -3,7 +3,7 @@
  * Handles AI chat functionality powered by Claude via OpenClaw
  */
 
-import { error as logError, info } from '../logger.js';
+import { info, error as logError } from '../logger.js';
 
 // Conversation history per channel (simple in-memory store)
 let conversationHistory = new Map();

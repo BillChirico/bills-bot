@@ -3,7 +3,7 @@
  * Handles Discord event listeners and handlers
  */
 
-import { error as logError, info, warn } from '../logger.js';
+import { info, error as logError, warn } from '../logger.js';
 import { needsSplitting, splitMessage } from '../utils/splitMessage.js';
 import { generateResponse } from './ai.js';
 import { accumulate, resetCounter } from './chimeIn.js';

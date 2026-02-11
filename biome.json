@@ -40,5 +40,10 @@
   },
   "files": {
     "includes": ["**/*.js", "**/*.json", "**/*.md"]
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
   }
 }

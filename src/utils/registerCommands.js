@@ -5,7 +5,7 @@
  */
 
 import { REST, Routes } from 'discord.js';
-import { error as logError, info } from '../logger.js';
+import { info, error as logError } from '../logger.js';
 
 /**
  * Register slash commands with Discord
@@ -49,7 +49,9 @@ export async function registerCommands(commands, clientId, token, guildId = null
       data = await rest.put(Routes.applicationCommands(clientId), { body: commandData });
     }
 
-    info(`Successfully registered ${data.length} slash command(s)`, { scope: guildId ? 'guild' : 'global' });
+    info(`Successfully registered ${data.length} slash command(s)`, {
+      scope: guildId ? 'guild' : 'global',
+    });
   } catch (err) {
     logError('Failed to register commands', { error: err.message });
     throw err;
