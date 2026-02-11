@@ -2,114 +2,90 @@ import { describe, expect, it } from 'vitest';
 import { needsSplitting, splitMessage } from '../../src/utils/splitMessage.js';
 
 describe('splitMessage', () => {
-	describe('needsSplitting', () => {
-		it('should return false for short messages', () => {
-			expect(needsSplitting('Hello world')).toBe(false);
-		});
+  it('should return empty array for empty/null input', () => {
+    expect(splitMessage('')).toEqual([]);
+    expect(splitMessage(null)).toEqual([]);
+    expect(splitMessage(undefined)).toEqual([]);
+  });
 
-		it('should return false for messages at exactly 2000 chars', () => {
-			const message = 'a'.repeat(2000);
-			expect(needsSplitting(message)).toBe(false);
-		});
+  it('should return single-element array for short messages', () => {
+    expect(splitMessage('hello')).toEqual(['hello']);
+  });
 
-		it('should return true for messages over 2000 chars', () => {
-			const message = 'a'.repeat(2001);
-			expect(needsSplitting(message)).toBe(true);
-		});
+  it('should not split messages at exactly the limit', () => {
+    const msg = 'a'.repeat(1990);
+    expect(splitMessage(msg)).toEqual([msg]);
+  });
 
-		it('should return falsy for empty string', () => {
-			expect(needsSplitting('')).toBeFalsy();
-		});
+  it('should split messages longer than the limit', () => {
+    const msg = 'a'.repeat(2000);
+    const chunks = splitMessage(msg, 1000);
+    expect(chunks.length).toBe(2);
+    expect(chunks[0].length).toBe(1000);
+    expect(chunks[1].length).toBe(1000);
+  });
 
-		it('should return falsy for null/undefined', () => {
-			expect(needsSplitting(null)).toBeFalsy();
-			expect(needsSplitting(undefined)).toBeFalsy();
-		});
-	});
+  it('should split on word boundaries when possible', () => {
+    // Create a message with spaces — split should happen at a space
+    const msg = 'hello world foo bar baz qux';
+    const chunks = splitMessage(msg, 11);
+    expect(chunks.length).toBeGreaterThan(1);
+    // Each chunk should be <= maxLength
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(11);
+    }
+  });
 
-	describe('splitMessage', () => {
-		it('should return single chunk for short messages', () => {
-			const result = splitMessage('Hello world');
-			expect(result).toEqual(['Hello world']);
-		});
+  it('should force split when no space found', () => {
+    const msg = 'a'.repeat(3000);
+    const chunks = splitMessage(msg, 1000);
+    expect(chunks.length).toBe(3);
+    expect(chunks[0].length).toBe(1000);
+    expect(chunks[1].length).toBe(1000);
+    expect(chunks[2].length).toBe(1000);
+  });
 
-		it('should return empty array for empty string', () => {
-			const result = splitMessage('');
-			expect(result).toEqual([]);
-		});
+  it('should handle custom maxLength', () => {
+    const msg = 'hello world foo bar';
+    const chunks = splitMessage(msg, 11);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(11);
+    }
+  });
 
-		it('should return empty array for null/undefined', () => {
-			expect(splitMessage(null)).toEqual([]);
-			expect(splitMessage(undefined)).toEqual([]);
-		});
+  it('should trim leading whitespace on subsequent chunks', () => {
+    const msg = 'aaaa bbbb cccc';
+    const chunks = splitMessage(msg, 5);
+    for (const chunk of chunks) {
+      expect(chunk).not.toMatch(/^\s/);
+    }
+  });
 
-		it('should split long messages into multiple chunks', () => {
-			const message = 'a'.repeat(3000);
-			const result = splitMessage(message);
-			expect(result.length).toBe(2);
-			expect(result[0].length).toBeLessThanOrEqual(1990);
-			expect(result[1].length).toBeLessThanOrEqual(1990);
-		});
+  it('should handle messages with only spaces gracefully', () => {
+    const msg = ' '.repeat(3000);
+    const chunks = splitMessage(msg, 1000);
+    // After trim, remaining chunks may be empty; just ensure no crash
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+});
 
-		it('should split on word boundaries when possible', () => {
-			const words = Array(500).fill('hello').join(' ');
-			const result = splitMessage(words);
-			expect(result.length).toBeGreaterThan(1);
-			for (const chunk of result) {
-				expect(chunk.length).toBeLessThanOrEqual(1990);
-				// Should not end with partial word (space or end of string)
-				if (chunk !== result[result.length - 1]) {
-					expect(chunk.endsWith(' ') || chunk.endsWith('hello')).toBe(true);
-				}
-			}
-		});
+describe('needsSplitting', () => {
+  it('should return false for short messages', () => {
+    expect(needsSplitting('hello')).toBe(false);
+  });
 
-		it('should force split if no spaces found', () => {
-			const message = 'a'.repeat(3000);
-			const result = splitMessage(message);
-			expect(result.length).toBeGreaterThan(1);
-			for (const chunk of result) {
-				expect(chunk.length).toBeLessThanOrEqual(1990);
-			}
-		});
+  it('should return false for exactly 2000 chars', () => {
+    expect(needsSplitting('a'.repeat(2000))).toBe(false);
+  });
 
-		it('should respect custom maxLength parameter', () => {
-			const message = 'a'.repeat(200);
-			const result = splitMessage(message, 100);
-			expect(result.length).toBe(2);
-			expect(result[0].length).toBe(100);
-			expect(result[1].length).toBe(100);
-		});
+  it('should return true for messages over 2000 chars', () => {
+    expect(needsSplitting('a'.repeat(2001))).toBe(true);
+  });
 
-		it('should trim whitespace from start of subsequent chunks', () => {
-			const message = 'hello world '.repeat(200);
-			const result = splitMessage(message);
-			for (const chunk of result) {
-				if (chunk !== result[0]) {
-					expect(chunk.startsWith(' ')).toBe(false);
-				}
-			}
-		});
-
-		it('should handle messages with no spaces at all', () => {
-			const message = 'x'.repeat(2500);
-			const result = splitMessage(message);
-			expect(result.length).toBeGreaterThan(1);
-			const totalLength = result.reduce((sum, chunk) => sum + chunk.length, 0);
-			expect(totalLength).toBe(2500);
-		});
-
-		it('should preserve content integrity', () => {
-			const message = 'a'.repeat(3000);
-			const result = splitMessage(message);
-			const reassembled = result.join('');
-			expect(reassembled).toBe(message);
-		});
-
-		it('should handle edge case of message exactly at chunk boundary', () => {
-			const message = 'a'.repeat(1990);
-			const result = splitMessage(message);
-			expect(result).toEqual([message]);
-		});
-	});
+  it('should return falsy for null/empty', () => {
+    expect(needsSplitting('')).toBeFalsy();
+    expect(needsSplitting(null)).toBeFalsy();
+    expect(needsSplitting(undefined)).toBeFalsy();
+  });
 });

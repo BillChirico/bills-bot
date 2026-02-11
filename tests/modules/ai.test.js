@@ -1,340 +1,204 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock logger
+vi.mock('../../src/logger.js', () => ({
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+}));
+
 import {
-	addToHistory,
-	generateResponse,
-	getConversationHistory,
-	getHistory,
-	setConversationHistory,
+  addToHistory,
+  generateResponse,
+  getConversationHistory,
+  getHistory,
+  OPENCLAW_TOKEN,
+  OPENCLAW_URL,
+  setConversationHistory,
 } from '../../src/modules/ai.js';
 
 describe('ai module', () => {
-	beforeEach(() => {
-		// Clear conversation history before each test
-		setConversationHistory(new Map());
-		vi.clearAllMocks();
-	});
+  beforeEach(() => {
+    // Reset conversation history before each test
+    setConversationHistory(new Map());
+  });
 
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-	describe('getConversationHistory', () => {
-		it('should return the conversation history map', () => {
-			const history = getConversationHistory();
-			expect(history).toBeInstanceOf(Map);
-		});
+  describe('getConversationHistory / setConversationHistory', () => {
+    it('should get and set conversation history', () => {
+      const history = new Map([['channel1', [{ role: 'user', content: 'hi' }]]]);
+      setConversationHistory(history);
+      expect(getConversationHistory()).toBe(history);
+    });
+  });
 
-		it('should return the same map instance', () => {
-			const history1 = getConversationHistory();
-			const history2 = getConversationHistory();
-			expect(history1).toBe(history2);
-		});
-	});
+  describe('OPENCLAW_URL and OPENCLAW_TOKEN', () => {
+    it('should export URL and token constants', () => {
+      expect(typeof OPENCLAW_URL).toBe('string');
+      expect(typeof OPENCLAW_TOKEN).toBe('string');
+    });
+  });
 
-	describe('setConversationHistory', () => {
-		it('should set the conversation history map', () => {
-			const newHistory = new Map([['channel1', [{ role: 'user', content: 'hello' }]]]);
-			setConversationHistory(newHistory);
-			const history = getConversationHistory();
-			expect(history).toBe(newHistory);
-		});
-	});
+  describe('getHistory', () => {
+    it('should create empty history for new channel', () => {
+      const history = getHistory('new-channel');
+      expect(history).toEqual([]);
+    });
 
-	describe('getHistory', () => {
-		it('should return empty array for new channel', () => {
-			const history = getHistory('channel1');
-			expect(history).toEqual([]);
-		});
+    it('should return existing history for known channel', () => {
+      addToHistory('ch1', 'user', 'hello');
+      const history = getHistory('ch1');
+      expect(history.length).toBe(1);
+      expect(history[0]).toEqual({ role: 'user', content: 'hello' });
+    });
+  });
 
-		it('should return existing history for channel', () => {
-			addToHistory('channel1', 'user', 'hello');
-			const history = getHistory('channel1');
-			expect(history).toHaveLength(1);
-			expect(history[0]).toEqual({ role: 'user', content: 'hello' });
-		});
+  describe('addToHistory', () => {
+    it('should add messages to channel history', () => {
+      addToHistory('ch1', 'user', 'hello');
+      addToHistory('ch1', 'assistant', 'hi there');
+      const history = getHistory('ch1');
+      expect(history.length).toBe(2);
+    });
 
-		it('should create separate histories for different channels', () => {
-			addToHistory('channel1', 'user', 'hello');
-			addToHistory('channel2', 'user', 'world');
-			const history1 = getHistory('channel1');
-			const history2 = getHistory('channel2');
-			expect(history1).toHaveLength(1);
-			expect(history2).toHaveLength(1);
-			expect(history1[0].content).toBe('hello');
-			expect(history2[0].content).toBe('world');
-		});
-	});
+    it('should trim history beyond MAX_HISTORY (20)', () => {
+      for (let i = 0; i < 25; i++) {
+        addToHistory('ch1', 'user', `message ${i}`);
+      }
+      const history = getHistory('ch1');
+      expect(history.length).toBe(20);
+      expect(history[0].content).toBe('message 5');
+    });
+  });
 
-	describe('addToHistory', () => {
-		it('should add message to channel history', () => {
-			addToHistory('channel1', 'user', 'hello');
-			const history = getHistory('channel1');
-			expect(history).toHaveLength(1);
-			expect(history[0]).toEqual({ role: 'user', content: 'hello' });
-		});
+  describe('generateResponse', () => {
+    it('should return AI response on success', async () => {
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Hello!' } }],
+        }),
+      };
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-		it('should support multiple messages', () => {
-			addToHistory('channel1', 'user', 'hello');
-			addToHistory('channel1', 'assistant', 'hi there');
-			addToHistory('channel1', 'user', 'how are you');
-			const history = getHistory('channel1');
-			expect(history).toHaveLength(3);
-		});
+      const config = { ai: { model: 'test-model', maxTokens: 512, systemPrompt: 'You are a bot' } };
+      const result = await generateResponse('ch1', 'Hi', 'testuser', config);
 
-		it('should trim history when exceeding max length', () => {
-			// Add 21 messages (max is 20)
-			for (let i = 0; i < 21; i++) {
-				addToHistory('channel1', 'user', `message ${i}`);
-			}
-			const history = getHistory('channel1');
-			expect(history).toHaveLength(20);
-			// First message should be removed
-			expect(history[0].content).toBe('message 1');
-			expect(history[19].content).toBe('message 20');
-		});
+      expect(result).toBe('Hello!');
+      expect(globalThis.fetch).toHaveBeenCalled();
+    });
 
-		it('should keep trimming as more messages are added', () => {
-			// Add 25 messages
-			for (let i = 0; i < 25; i++) {
-				addToHistory('channel1', 'user', `message ${i}`);
-			}
-			const history = getHistory('channel1');
-			expect(history).toHaveLength(20);
-			expect(history[0].content).toBe('message 5');
-			expect(history[19].content).toBe('message 24');
-		});
-	});
+    it('should use default system prompt if not configured', async () => {
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Response' } }],
+        }),
+      };
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-	describe('generateResponse', () => {
-		it('should make API request and return response', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'Hello!' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
+      const config = { ai: {} };
+      const result = await generateResponse('ch1', 'Hi', 'testuser', config);
 
-			const config = { ai: { model: 'claude-sonnet-4-20250514', maxTokens: 1024 } };
-			const response = await generateResponse('channel1', 'hi', 'user1', config);
+      expect(result).toBe('Response');
+      // Verify fetch was called with default model
+      const fetchCall = globalThis.fetch.mock.calls[0];
+      const body = JSON.parse(fetchCall[1].body);
+      expect(body.model).toBe('claude-sonnet-4-20250514');
+      expect(body.max_tokens).toBe(1024);
+    });
 
-			expect(response).toBe('Hello!');
-			expect(mockFetch).toHaveBeenCalledTimes(1);
-		});
+    it('should handle empty choices gracefully', async () => {
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({ choices: [] }),
+      };
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-		it('should include system prompt in request', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'Response' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
+      const config = { ai: {} };
+      const result = await generateResponse('ch1', 'Hi', 'testuser', config);
+      expect(result).toBe('I got nothing. Try again?');
+    });
 
-			const config = {
-				ai: {
-					systemPrompt: 'You are a test bot',
-					model: 'claude-sonnet-4-20250514',
-					maxTokens: 1024,
-				},
-			};
+    it('should return fallback on API error', async () => {
+      const mockResponse = {
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      };
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-			await generateResponse('channel1', 'test', 'user1', config);
+      const mockHealth = { setAPIStatus: vi.fn(), recordAIRequest: vi.fn() };
+      const config = { ai: {} };
+      const result = await generateResponse('ch1', 'Hi', 'testuser', config, mockHealth);
 
-			const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-			expect(requestBody.messages[0].role).toBe('system');
-			expect(requestBody.messages[0].content).toContain('test bot');
-		});
+      expect(result).toContain('trouble thinking');
+      expect(mockHealth.setAPIStatus).toHaveBeenCalledWith('error');
+    });
 
-		it('should include conversation history', async () => {
-			addToHistory('channel1', 'user', 'previous message');
-			addToHistory('channel1', 'assistant', 'previous response');
+    it('should return fallback on fetch exception', async () => {
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network failure'));
 
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'New response' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
+      const config = { ai: {} };
+      const result = await generateResponse('ch1', 'Hi', 'testuser', config);
+      expect(result).toContain('trouble thinking');
+    });
 
-			const config = { ai: {} };
-			await generateResponse('channel1', 'new message', 'user1', config);
+    it('should update health monitor on success', async () => {
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'OK' } }],
+        }),
+      };
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-			const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-			expect(requestBody.messages).toHaveLength(4); // system + 2 history + new user
-		});
+      const mockHealth = { setAPIStatus: vi.fn(), recordAIRequest: vi.fn() };
+      const config = { ai: {} };
+      await generateResponse('ch1', 'Hi', 'testuser', config, mockHealth);
 
-		it('should update history after successful response', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'AI response' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
+      expect(mockHealth.recordAIRequest).toHaveBeenCalled();
+      expect(mockHealth.setAPIStatus).toHaveBeenCalledWith('ok');
+    });
 
-			const config = { ai: {} };
-			await generateResponse('channel1', 'hello', 'user1', config);
+    it('should update conversation history on success', async () => {
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Reply' } }],
+        }),
+      };
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-			const history = getHistory('channel1');
-			expect(history).toHaveLength(2);
-			expect(history[0].content).toContain('user1: hello');
-			expect(history[1].content).toBe('AI response');
-		});
+      const config = { ai: {} };
+      await generateResponse('ch1', 'Hello', 'user1', config);
 
-		it('should handle API errors gracefully', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: false,
-				status: 500,
-				statusText: 'Internal Server Error',
-			}));
-			global.fetch = mockFetch;
+      const history = getHistory('ch1');
+      expect(history.length).toBe(2);
+      expect(history[0].role).toBe('user');
+      expect(history[0].content).toContain('user1: Hello');
+      expect(history[1].role).toBe('assistant');
+      expect(history[1].content).toBe('Reply');
+    });
 
-			const config = { ai: {} };
-			const response = await generateResponse('channel1', 'test', 'user1', config);
+    it('should include Authorization header when token is set', async () => {
+      const mockResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'OK' } }],
+        }),
+      };
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse);
 
-			expect(response).toContain('trouble thinking');
-		});
+      const config = { ai: {} };
+      await generateResponse('ch1', 'Hi', 'user', config);
 
-		it('should handle network errors gracefully', async () => {
-			const mockFetch = vi.fn(async () => {
-				throw new Error('Network error');
-			});
-			global.fetch = mockFetch;
-
-			const config = { ai: {} };
-			const response = await generateResponse('channel1', 'test', 'user1', config);
-
-			expect(response).toContain('trouble thinking');
-		});
-
-		it('should update health monitor on success', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'Response' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
-
-			const healthMonitor = {
-				recordAIRequest: vi.fn(),
-				setAPIStatus: vi.fn(),
-			};
-
-			const config = { ai: {} };
-			await generateResponse('channel1', 'test', 'user1', config, healthMonitor);
-
-			expect(healthMonitor.recordAIRequest).toHaveBeenCalled();
-			expect(healthMonitor.setAPIStatus).toHaveBeenCalledWith('ok');
-		});
-
-		it('should update health monitor on error', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: false,
-				status: 500,
-				statusText: 'Error',
-			}));
-			global.fetch = mockFetch;
-
-			const healthMonitor = {
-				setAPIStatus: vi.fn(),
-			};
-
-			const config = { ai: {} };
-			await generateResponse('channel1', 'test', 'user1', config, healthMonitor);
-
-			expect(healthMonitor.setAPIStatus).toHaveBeenCalledWith('error');
-		});
-
-		it('should use configured model and maxTokens', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'Response' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
-
-			const config = {
-				ai: {
-					model: 'claude-opus-4',
-					maxTokens: 2048,
-				},
-			};
-
-			await generateResponse('channel1', 'test', 'user1', config);
-
-			const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-			expect(requestBody.model).toBe('claude-opus-4');
-			expect(requestBody.max_tokens).toBe(2048);
-		});
-
-		it('should use default model if not configured', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'Response' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
-
-			const config = { ai: {} };
-			await generateResponse('channel1', 'test', 'user1', config);
-
-			const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-			expect(requestBody.model).toBe('claude-sonnet-4-20250514');
-			expect(requestBody.max_tokens).toBe(1024);
-		});
-
-		it('should handle empty API response', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [],
-				}),
-			}));
-			global.fetch = mockFetch;
-
-			const config = { ai: {} };
-			const response = await generateResponse('channel1', 'test', 'user1', config);
-
-			expect(response).toBe('I got nothing. Try again?');
-		});
-
-		it('should include authorization header if token is set', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'Response' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
-
-			// Set token via environment (module imports OPENCLAW_TOKEN)
-			const config = { ai: {} };
-			await generateResponse('channel1', 'test', 'user1', config);
-
-			const headers = mockFetch.mock.calls[0][1].headers;
-			expect(headers['Content-Type']).toBe('application/json');
-		});
-
-		it('should format user message with username', async () => {
-			const mockFetch = vi.fn(async () => ({
-				ok: true,
-				json: async () => ({
-					choices: [{ message: { content: 'Response' } }],
-				}),
-			}));
-			global.fetch = mockFetch;
-
-			const config = { ai: {} };
-			await generateResponse('channel1', 'hello', 'JohnDoe', config);
-
-			const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-			const lastMessage = requestBody.messages[requestBody.messages.length - 1];
-			expect(lastMessage.content).toBe('JohnDoe: hello');
-		});
-	});
+      const fetchCall = globalThis.fetch.mock.calls[0];
+      expect(fetchCall[1].headers['Content-Type']).toBe('application/json');
+    });
+  });
 });

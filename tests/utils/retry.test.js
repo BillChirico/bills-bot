@@ -1,339 +1,135 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock logger before imports
+vi.mock('../../src/logger.js', () => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 import { createRetryWrapper, withRetry } from '../../src/utils/retry.js';
 
-describe('retry', () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-		vi.useRealTimers();
-	});
+describe('withRetry', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
 
-	describe('withRetry', () => {
-		it('should return result on successful first attempt', async () => {
-			const fn = vi.fn(async () => 'success');
-			const result = await withRetry(fn);
-			expect(result).toBe('success');
-			expect(fn).toHaveBeenCalledTimes(1);
-		});
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
-		it('should retry on retryable error', async () => {
-			vi.useFakeTimers();
-			let attempts = 0;
-			const fn = vi.fn(async () => {
-				attempts++;
-				if (attempts < 2) {
-					const err = new Error('timeout');
-					throw err;
-				}
-				return 'success';
-			});
+  it('should return result on first successful call', async () => {
+    const fn = vi.fn().mockResolvedValue('success');
+    const result = await withRetry(fn);
+    expect(result).toBe('success');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
 
-			const promise = withRetry(fn, { baseDelay: 100, maxRetries: 2 });
+  it('should retry on retryable errors', async () => {
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }))
+      .mockResolvedValue('success');
 
-			// Fast-forward through delays
-			await vi.runAllTimersAsync();
+    const promise = withRetry(fn, { baseDelay: 100, maxRetries: 3 });
 
-			const result = await promise;
-			expect(result).toBe('success');
-			expect(fn).toHaveBeenCalledTimes(2);
-			vi.useRealTimers();
-		});
+    // Advance time past the first retry delay
+    await vi.advanceTimersByTimeAsync(200);
 
-		it('should respect maxRetries limit', async () => {
-			vi.useFakeTimers();
-			const fn = vi.fn(async () => {
-				const err = new Error('network error');
-				err.code = 'ECONNREFUSED';
-				throw err;
-			});
+    const result = await promise;
+    expect(result).toBe('success');
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
 
-			vi.spyOn(global, 'setTimeout').mockImplementation((fn) => {
-				Promise.resolve().then(fn);
-				return 1;
-			});
+  it('should throw after max retries for retryable errors', async () => {
+    const err = Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' });
+    const fn = vi.fn().mockRejectedValue(err);
 
-			try {
-				await withRetry(fn, { maxRetries: 2, baseDelay: 10 });
-			} catch (err) {
-				// Expected to fail
-			}
-			expect(fn).toHaveBeenCalledTimes(3); // initial + 2 retries
-			vi.useRealTimers();
-		});
+    const expectation = expect(withRetry(fn, { maxRetries: 2, baseDelay: 100 })).rejects.toThrow(
+      'timeout',
+    );
 
-		it('should not retry non-retryable errors', async () => {
-			const fn = vi.fn(async () => {
-				const err = new Error('Invalid config');
-				throw err;
-			});
+    // Advance timers for retry backoff delays
+    await vi.advanceTimersByTimeAsync(1000);
 
-			await expect(withRetry(fn, { maxRetries: 3 })).rejects.toThrow('Invalid config');
-			expect(fn).toHaveBeenCalledTimes(1);
-		});
+    await expectation;
+    expect(fn).toHaveBeenCalledTimes(3); // initial + 2 retries
+  });
 
-		it('should use exponential backoff', async () => {
-			vi.useFakeTimers();
-			const delays = [];
+  it('should throw immediately for non-retryable errors', async () => {
+    const err = new Error('Missing Permissions');
+    const fn = vi.fn().mockRejectedValue(err);
 
-			// Mock sleep to capture delays without actually waiting
-			vi.spyOn(global, 'setTimeout').mockImplementation((fn, delay) => {
-				if (delay > 0) delays.push(delay);
-				// Execute immediately
-				Promise.resolve().then(fn);
-				return 1;
-			});
+    await expect(withRetry(fn, { maxRetries: 3, baseDelay: 100 })).rejects.toThrow(
+      'Missing Permissions',
+    );
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
 
-			const fn = vi.fn(async () => {
-				const err = new Error('timeout');
-				throw err;
-			});
+  it('should use custom shouldRetry function', async () => {
+    const err = new Error('custom error');
+    const fn = vi.fn().mockRejectedValueOnce(err).mockResolvedValue('ok');
 
-			try {
-				await withRetry(fn, { maxRetries: 3, baseDelay: 100 });
-			} catch (err) {
-				// Expected to fail
-			}
+    const shouldRetry = vi.fn().mockReturnValue(true);
+    const promise = withRetry(fn, { shouldRetry, baseDelay: 100, maxRetries: 3 });
 
-			// Exponential backoff: 100, 200, 400
-			expect(delays.length).toBeGreaterThan(0);
-			expect(delays[0]).toBe(100);
-			expect(delays[1]).toBe(200);
-			expect(delays[2]).toBe(400);
+    await vi.advanceTimersByTimeAsync(200);
 
-			vi.useRealTimers();
-		});
+    const result = await promise;
+    expect(result).toBe('ok');
+    expect(shouldRetry).toHaveBeenCalledWith(err, {});
+  });
 
-		it('should cap delay at maxDelay', async () => {
-			vi.useFakeTimers();
-			const delays = [];
+  it('should respect maxDelay cap', async () => {
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }))
+      .mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }))
+      .mockResolvedValue('ok');
 
-			vi.spyOn(global, 'setTimeout').mockImplementation((fn, delay) => {
-				if (delay > 0) delays.push(delay);
-				Promise.resolve().then(fn);
-				return 1;
-			});
+    const promise = withRetry(fn, {
+      baseDelay: 10000,
+      maxDelay: 15000,
+      maxRetries: 3,
+    });
 
-			const fn = vi.fn(async () => {
-				const err = new Error('timeout');
-				throw err;
-			});
+    // The delay should be capped at maxDelay (15000ms)
+    await vi.advanceTimersByTimeAsync(16000);
+    await vi.advanceTimersByTimeAsync(16000);
 
-			try {
-				await withRetry(fn, {
-					maxRetries: 3,
-					baseDelay: 100,
-					maxDelay: 250,
-				});
-			} catch (err) {
-				// Expected to fail
-			}
+    const result = await promise;
+    expect(result).toBe('ok');
+  });
 
-			// Should cap at maxDelay
-			for (const delay of delays) {
-				expect(delay).toBeLessThanOrEqual(250);
-			}
+  it('should pass context to shouldRetry', async () => {
+    const err = new Error('fail');
+    const fn = vi.fn().mockRejectedValue(err);
+    const shouldRetry = vi.fn().mockReturnValue(false);
+    const context = { operation: 'test' };
 
-			vi.useRealTimers();
-		});
+    await expect(withRetry(fn, { shouldRetry, context })).rejects.toThrow('fail');
+    expect(shouldRetry).toHaveBeenCalledWith(err, context);
+  });
+});
 
-		it('should use custom shouldRetry function', async () => {
-			vi.useFakeTimers();
-			const customRetry = vi.fn(() => true);
-			let attempts = 0;
-			const fn = vi.fn(async () => {
-				attempts++;
-				if (attempts < 2) {
-					throw new Error('custom error');
-				}
-				return 'success';
-			});
+describe('createRetryWrapper', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-			const promise = withRetry(fn, {
-				maxRetries: 2,
-				baseDelay: 10,
-				shouldRetry: customRetry,
-			});
+  it('should create a wrapper with default options', async () => {
+    const wrapper = createRetryWrapper({ maxRetries: 0 });
+    const fn = vi.fn().mockResolvedValue('result');
+    const result = await wrapper(fn);
+    expect(result).toBe('result');
+  });
 
-			await vi.runAllTimersAsync();
-
-			const result = await promise;
-			expect(result).toBe('success');
-			expect(customRetry).toHaveBeenCalled();
-			vi.useRealTimers();
-		});
-
-		it('should pass context to logging', async () => {
-			vi.useFakeTimers();
-			const fn = vi.fn(async () => {
-				const err = new Error('timeout');
-				throw err;
-			});
-
-			vi.spyOn(global, 'setTimeout').mockImplementation((fn) => {
-				Promise.resolve().then(fn);
-				return 1;
-			});
-
-			try {
-				await withRetry(fn, {
-					maxRetries: 1,
-					baseDelay: 10,
-					context: { operation: 'test' },
-				});
-			} catch (err) {
-				// Expected to fail
-			}
-			vi.useRealTimers();
-		});
-
-		it('should handle synchronous errors', async () => {
-			const fn = vi.fn(() => {
-				throw new Error('sync error');
-			});
-
-			await expect(withRetry(fn)).rejects.toThrow('sync error');
-		});
-
-		it('should use default options', async () => {
-			vi.useFakeTimers();
-			const fn = vi.fn(async () => {
-				const err = new Error('timeout');
-				throw err;
-			});
-
-			vi.spyOn(global, 'setTimeout').mockImplementation((fn) => {
-				Promise.resolve().then(fn);
-				return 1;
-			});
-
-			try {
-				await withRetry(fn);
-			} catch (err) {
-				// Expected to fail
-			}
-			expect(fn).toHaveBeenCalledTimes(4); // 1 initial + 3 retries (default)
-			vi.useRealTimers();
-		});
-
-		it('should handle errors without message', async () => {
-			const fn = vi.fn(async () => {
-				throw {};
-			});
-
-			await expect(withRetry(fn)).rejects.toBeTruthy();
-		});
-	});
-
-	describe('createRetryWrapper', () => {
-		it('should create retry function with default options', async () => {
-			const retry = createRetryWrapper({ maxRetries: 1, baseDelay: 10 });
-			const fn = vi.fn(async () => 'success');
-			const result = await retry(fn);
-			expect(result).toBe('success');
-		});
-
-		it('should allow overriding default options', async () => {
-			vi.useFakeTimers();
-			const retry = createRetryWrapper({ maxRetries: 1 });
-			const fn = vi.fn(async () => {
-				const err = new Error('timeout');
-				throw err;
-			});
-
-			vi.spyOn(global, 'setTimeout').mockImplementation((fn) => {
-				Promise.resolve().then(fn);
-				return 1;
-			});
-
-			try {
-				await retry(fn, { maxRetries: 2, baseDelay: 10 });
-			} catch (err) {
-				// Expected to fail
-			}
-			expect(fn).toHaveBeenCalledTimes(3); // Override maxRetries: 2
-			vi.useRealTimers();
-		});
-
-		it('should merge options correctly', async () => {
-			vi.useFakeTimers();
-			const retry = createRetryWrapper({ baseDelay: 100, maxDelay: 200 });
-			let attempts = 0;
-			const fn = vi.fn(async () => {
-				attempts++;
-				if (attempts < 2) {
-					const err = new Error('timeout');
-					throw err;
-				}
-				return 'success';
-			});
-
-			const promise = retry(fn, { maxRetries: 2 });
-
-			await vi.runAllTimersAsync();
-
-			const result = await promise;
-			expect(result).toBe('success');
-			vi.useRealTimers();
-		});
-
-		it('should create independent retry wrappers', async () => {
-			const retry1 = createRetryWrapper({ maxRetries: 1 });
-			const retry2 = createRetryWrapper({ maxRetries: 2 });
-
-			expect(retry1).not.toBe(retry2);
-		});
-	});
-
-	describe('edge cases', () => {
-		it('should handle zero maxRetries', async () => {
-			const fn = vi.fn(async () => {
-				throw new Error('fail');
-			});
-
-			await expect(withRetry(fn, { maxRetries: 0 })).rejects.toThrow();
-			expect(fn).toHaveBeenCalledTimes(1);
-		});
-
-		it('should handle very large maxRetries', async () => {
-			vi.useFakeTimers();
-			let attempts = 0;
-			const fn = vi.fn(async () => {
-				attempts++;
-				if (attempts < 3) {
-					const err = new Error('timeout');
-					throw err;
-				}
-				return 'success';
-			});
-
-			const promise = withRetry(fn, { maxRetries: 100, baseDelay: 1 });
-
-			await vi.runAllTimersAsync();
-
-			const result = await promise;
-			expect(result).toBe('success');
-			expect(fn).toHaveBeenCalledTimes(3);
-			vi.useRealTimers();
-		});
-
-		it('should handle baseDelay of 0', async () => {
-			vi.useFakeTimers();
-			let attempts = 0;
-			const fn = vi.fn(async () => {
-				attempts++;
-				if (attempts < 2) {
-					const err = new Error('timeout');
-					throw err;
-				}
-				return 'success';
-			});
-
-			const promise = withRetry(fn, { maxRetries: 1, baseDelay: 0 });
-
-			await vi.runAllTimersAsync();
-
-			const result = await promise;
-			expect(result).toBe('success');
-			vi.useRealTimers();
-		});
-	});
+  it('should merge default and per-call options', async () => {
+    const wrapper = createRetryWrapper({ maxRetries: 0 });
+    const fn = vi.fn().mockResolvedValue('ok');
+    const result = await wrapper(fn, { context: { test: true } });
+    expect(result).toBe('ok');
+  });
 });

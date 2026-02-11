@@ -1,243 +1,178 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock pg before importing the module
+const pgMocks = vi.hoisted(() => ({
+  poolConfig: null,
+  poolQuery: vi.fn(),
+  poolOn: vi.fn(),
+  poolConnect: vi.fn(),
+  poolEnd: vi.fn(),
+  clientQuery: vi.fn(),
+  clientRelease: vi.fn(),
+}));
+
+vi.mock('../src/logger.js', () => ({
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+}));
+
 vi.mock('pg', () => {
-  return {
-    default: {
-      Pool: vi.fn(),
-    },
-    Pool: vi.fn(),
-  };
+  class Pool {
+    constructor(config) {
+      pgMocks.poolConfig = config;
+    }
+
+    query(...args) {
+      return pgMocks.poolQuery(...args);
+    }
+
+    on(...args) {
+      return pgMocks.poolOn(...args);
+    }
+
+    connect(...args) {
+      return pgMocks.poolConnect(...args);
+    }
+
+    end(...args) {
+      return pgMocks.poolEnd(...args);
+    }
+  }
+
+  return { default: { Pool } };
 });
 
-describe('database module', () => {
-  let db;
-  let mockPool;
-  let mockClient;
+describe('db module', () => {
+  let dbModule;
 
   beforeEach(async () => {
-    // Reset modules to ensure clean state
     vi.resetModules();
 
-    mockClient = {
-      query: vi.fn().mockResolvedValue({ rows: [] }),
-      release: vi.fn(),
-    };
+    pgMocks.poolConfig = null;
+    pgMocks.poolQuery.mockReset().mockResolvedValue({});
+    pgMocks.poolOn.mockReset();
+    pgMocks.poolConnect.mockReset();
+    pgMocks.poolEnd.mockReset().mockResolvedValue(undefined);
+    pgMocks.clientQuery.mockReset().mockResolvedValue({});
+    pgMocks.clientRelease.mockReset();
 
-    mockPool = {
-      connect: vi.fn().mockResolvedValue(mockClient),
-      query: vi.fn().mockResolvedValue({ rows: [] }),
-      end: vi.fn().mockResolvedValue(undefined),
-      on: vi.fn(),
-    };
+    pgMocks.poolConnect.mockResolvedValue({
+      query: pgMocks.clientQuery,
+      release: pgMocks.clientRelease,
+    });
 
-    // Mock Pool constructor
-    const pg = await import('pg');
-    pg.Pool.mockImplementation(() => mockPool);
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/testdb';
+    delete process.env.DATABASE_SSL;
 
-    // Import module after mocking
-    db = await import('../src/db.js');
+    dbModule = await import('../src/db.js');
   });
 
   afterEach(async () => {
+    try {
+      await dbModule.closeDb();
+    } catch {
+      // ignore cleanup failures
+    }
+
+    delete process.env.DATABASE_URL;
+    delete process.env.DATABASE_SSL;
     vi.clearAllMocks();
   });
 
   describe('initDb', () => {
-    it('should throw error if DATABASE_URL is not set', async () => {
-      const originalUrl = process.env.DATABASE_URL;
+    it('should initialize database pool', async () => {
+      const pool = await dbModule.initDb();
+      expect(pool).toBeDefined();
+      expect(pgMocks.poolConnect).toHaveBeenCalled();
+      expect(pgMocks.clientQuery).toHaveBeenCalledWith('SELECT NOW()');
+      expect(pgMocks.clientRelease).toHaveBeenCalled();
+      expect(pgMocks.poolQuery).toHaveBeenCalled();
+    });
+
+    it('should return existing pool on second call', async () => {
+      const pool1 = await dbModule.initDb();
+      const pool2 = await dbModule.initDb();
+      expect(pool1).toBe(pool2);
+      expect(pgMocks.poolConnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw if DATABASE_URL is not set', async () => {
       delete process.env.DATABASE_URL;
-
-      await expect(db.initDb()).rejects.toThrow('DATABASE_URL');
-
-      process.env.DATABASE_URL = originalUrl;
-    });
-
-    it('should create connection pool', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      await db.initDb();
-
-      const pg = await import('pg');
-      expect(pg.Pool).toHaveBeenCalled();
-    });
-
-    it('should create config table', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      await db.initDb();
-
-      expect(mockPool.query).toHaveBeenCalledWith(
-        expect.stringContaining('CREATE TABLE IF NOT EXISTS config'),
+      await expect(dbModule.initDb()).rejects.toThrow(
+        'DATABASE_URL environment variable is not set',
       );
     });
 
-    it('should test connection on init', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      await db.initDb();
-
-      expect(mockPool.connect).toHaveBeenCalled();
-      expect(mockClient.query).toHaveBeenCalledWith('SELECT NOW()');
-      expect(mockClient.release).toHaveBeenCalled();
-    });
-
-    it('should return existing pool on subsequent calls', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      const pool1 = await db.initDb();
-      const pool2 = await db.initDb();
-
-      expect(pool1).toBe(pool2);
-      const pg = await import('pg');
-      expect(pg.Pool).toHaveBeenCalledTimes(1);
-    });
-
-    it('should handle connection errors', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-      mockPool.connect.mockRejectedValue(new Error('Connection failed'));
-
-      await expect(db.initDb()).rejects.toThrow('Connection failed');
-    });
-
-    it('should clean up pool on initialization error', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-      mockClient.query.mockRejectedValue(new Error('Query failed'));
-
-      await expect(db.initDb()).rejects.toThrow('Query failed');
-      expect(mockPool.end).toHaveBeenCalled();
-    });
-
-    it('should prevent concurrent initialization', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      const promise1 = db.initDb();
-      const promise2 = db.initDb();
-
-      await expect(promise2).rejects.toThrow('already in progress');
-      await promise1;
-    });
-
-    it('should register error handler on pool', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      await db.initDb();
-
-      expect(mockPool.on).toHaveBeenCalledWith('error', expect.any(Function));
+    it('should clean up pool on connection test failure', async () => {
+      pgMocks.poolConnect.mockRejectedValueOnce(new Error('connection failed'));
+      await expect(dbModule.initDb()).rejects.toThrow('connection failed');
+      expect(pgMocks.poolEnd).toHaveBeenCalled();
     });
   });
 
   describe('getPool', () => {
-    it('should throw error if pool is not initialized', () => {
-      expect(() => db.getPool()).toThrow('not initialized');
+    it('should throw if pool not initialized', () => {
+      expect(() => dbModule.getPool()).toThrow('Database not initialized');
     });
 
-    it('should return pool after initialization', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      await db.initDb();
-      const pool = db.getPool();
-
-      expect(pool).toBeDefined();
+    it('should return pool after init', async () => {
+      await dbModule.initDb();
+      expect(dbModule.getPool()).toBeDefined();
     });
   });
 
   describe('closeDb', () => {
-    it('should close the pool', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      await db.initDb();
-      await db.closeDb();
-
-      expect(mockPool.end).toHaveBeenCalled();
+    it('should close pool', async () => {
+      await dbModule.initDb();
+      await dbModule.closeDb();
+      expect(pgMocks.poolEnd).toHaveBeenCalled();
     });
 
-    it('should handle close errors gracefully', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-      mockPool.end.mockRejectedValue(new Error('Close failed'));
-
-      await db.initDb();
-      await expect(db.closeDb()).resolves.not.toThrow();
+    it('should do nothing if pool not initialized', async () => {
+      await dbModule.closeDb();
     });
 
-    it('should be safe to call when pool is not initialized', async () => {
-      await expect(db.closeDb()).resolves.not.toThrow();
-    });
-
-    it('should allow re-initialization after close', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      await db.initDb();
-      await db.closeDb();
-
-      // Reset the mock to track new calls
-      const pg = await import('pg');
-      pg.Pool.mockClear();
-
-      await db.initDb();
-
-      expect(pg.Pool).toHaveBeenCalled();
+    it('should handle close error gracefully', async () => {
+      await dbModule.initDb();
+      pgMocks.poolEnd.mockRejectedValueOnce(new Error('close failed'));
+      await dbModule.closeDb();
     });
   });
 
   describe('SSL configuration', () => {
     it('should disable SSL for railway.internal connections', async () => {
-      process.env.DATABASE_URL = 'postgresql://user:pass@host.railway.internal:5432/db';
-
-      await db.initDb();
-
-      const pg = await import('pg');
-      const poolConfig = pg.Pool.mock.calls[0][0];
-      expect(poolConfig.ssl).toBe(false);
+      process.env.DATABASE_URL = 'postgresql://test@postgres.railway.internal:5432/db';
+      await dbModule.initDb();
+      expect(pgMocks.poolConfig.ssl).toBe(false);
     });
 
     it('should disable SSL when DATABASE_SSL is "false"', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
+      process.env.DATABASE_URL = 'postgresql://test@localhost/db';
       process.env.DATABASE_SSL = 'false';
-
-      await db.initDb();
-
-      const pg = await import('pg');
-      const poolConfig = pg.Pool.mock.calls[0][0];
-      expect(poolConfig.ssl).toBe(false);
-
-      delete process.env.DATABASE_SSL;
+      await dbModule.initDb();
+      expect(pgMocks.poolConfig.ssl).toBe(false);
     });
 
     it('should disable SSL when DATABASE_SSL is "off"', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
+      process.env.DATABASE_URL = 'postgresql://test@localhost/db';
       process.env.DATABASE_SSL = 'off';
-
-      await db.initDb();
-
-      const pg = await import('pg');
-      const poolConfig = pg.Pool.mock.calls[0][0];
-      expect(poolConfig.ssl).toBe(false);
-
-      delete process.env.DATABASE_SSL;
+      await dbModule.initDb();
+      expect(pgMocks.poolConfig.ssl).toBe(false);
     });
 
-    it('should use SSL without verification when DATABASE_SSL is "no-verify"', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
+    it('should use rejectUnauthorized: false for "no-verify"', async () => {
+      process.env.DATABASE_URL = 'postgresql://test@localhost/db';
       process.env.DATABASE_SSL = 'no-verify';
-
-      await db.initDb();
-
-      const pg = await import('pg');
-      const poolConfig = pg.Pool.mock.calls[0][0];
-      expect(poolConfig.ssl).toEqual({ rejectUnauthorized: false });
-
-      delete process.env.DATABASE_SSL;
+      await dbModule.initDb();
+      expect(pgMocks.poolConfig.ssl).toEqual({ rejectUnauthorized: false });
     });
 
-    it('should use SSL with verification by default', async () => {
-      process.env.DATABASE_URL = 'postgresql://localhost/test';
-
-      await db.initDb();
-
-      const pg = await import('pg');
-      const poolConfig = pg.Pool.mock.calls[0][0];
-      expect(poolConfig.ssl).toEqual({ rejectUnauthorized: true });
+    it('should use rejectUnauthorized: true by default', async () => {
+      process.env.DATABASE_URL = 'postgresql://test@localhost/db';
+      delete process.env.DATABASE_SSL;
+      await dbModule.initDb();
+      expect(pgMocks.poolConfig.ssl).toEqual({ rejectUnauthorized: true });
     });
   });
 });

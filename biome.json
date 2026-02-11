@@ -39,6 +39,6 @@
     }
   },
   "files": {
-    "includes": ["**/*.js", "**/*.json", "**/*.md"]
+    "includes": ["**/*.js", "**/*.json", "**/*.md", "!coverage"]
   }
 }

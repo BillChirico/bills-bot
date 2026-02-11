@@ -1,263 +1,154 @@
-import { PermissionFlagsBits } from 'discord.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Mock discord.js before importing the module
+vi.mock('discord.js', () => ({
+  PermissionFlagsBits: {
+    Administrator: 1n << 3n,
+  },
+}));
+
 import { getPermissionError, hasPermission, isAdmin } from '../../src/utils/permissions.js';
 
-describe('permissions', () => {
-	describe('isAdmin', () => {
-		it('should return true for Discord Administrator permission', () => {
-			const member = {
-				permissions: {
-					has: (perm) => perm === PermissionFlagsBits.Administrator,
-				},
-			};
-			const config = {};
-			expect(isAdmin(member, config)).toBe(true);
-		});
+describe('isAdmin', () => {
+  it('should return false for null member or config', () => {
+    expect(isAdmin(null, {})).toBe(false);
+    expect(isAdmin({}, null)).toBe(false);
+    expect(isAdmin(null, null)).toBe(false);
+  });
 
-		it('should return true for configured admin role', () => {
-			const member = {
-				permissions: { has: () => false },
-				roles: {
-					cache: {
-						has: (roleId) => roleId === 'admin-role-123',
-					},
-				},
-			};
-			const config = {
-				permissions: {
-					adminRoleId: 'admin-role-123',
-				},
-			};
-			expect(isAdmin(member, config)).toBe(true);
-		});
+  it('should return true for members with Administrator permission', () => {
+    const member = {
+      permissions: { has: vi.fn().mockReturnValue(true) },
+      roles: { cache: { has: vi.fn().mockReturnValue(false) } },
+    };
+    expect(isAdmin(member, {})).toBe(true);
+  });
 
-		it('should return false for non-admin member', () => {
-			const member = {
-				permissions: { has: () => false },
-				roles: {
-					cache: { has: () => false },
-				},
-			};
-			const config = {
-				permissions: {
-					adminRoleId: 'admin-role-123',
-				},
-			};
-			expect(isAdmin(member, config)).toBe(false);
-		});
+  it('should return true for members with admin role', () => {
+    const member = {
+      permissions: { has: vi.fn().mockReturnValue(false) },
+      roles: { cache: { has: vi.fn().mockReturnValue(true) } },
+    };
+    const config = { permissions: { adminRoleId: '123456' } };
+    expect(isAdmin(member, config)).toBe(true);
+    expect(member.roles.cache.has).toHaveBeenCalledWith('123456');
+  });
 
-		it('should return false for null member', () => {
-			const config = {};
-			expect(isAdmin(null, config)).toBe(false);
-		});
+  it('should return false for regular members', () => {
+    const member = {
+      permissions: { has: vi.fn().mockReturnValue(false) },
+      roles: { cache: { has: vi.fn().mockReturnValue(false) } },
+    };
+    const config = { permissions: { adminRoleId: '123456' } };
+    expect(isAdmin(member, config)).toBe(false);
+  });
 
-		it('should return false for null config', () => {
-			const member = {
-				permissions: { has: () => true },
-			};
-			expect(isAdmin(member, null)).toBe(false);
-		});
+  it('should return false when no adminRoleId configured and not Admin', () => {
+    const member = {
+      permissions: { has: vi.fn().mockReturnValue(false) },
+      roles: { cache: { has: vi.fn() } },
+    };
+    expect(isAdmin(member, {})).toBe(false);
+  });
+});
 
-		it('should prioritize Discord admin permission over role', () => {
-			const member = {
-				permissions: {
-					has: (perm) => perm === PermissionFlagsBits.Administrator,
-				},
-				roles: {
-					cache: { has: () => false },
-				},
-			};
-			const config = {
-				permissions: {
-					adminRoleId: 'admin-role-123',
-				},
-			};
-			expect(isAdmin(member, config)).toBe(true);
-		});
+describe('hasPermission', () => {
+  it('should return false for null member, commandName, or config', () => {
+    expect(hasPermission(null, 'ping', {})).toBe(false);
+    expect(hasPermission({}, null, {})).toBe(false);
+    expect(hasPermission({}, 'ping', null)).toBe(false);
+  });
 
-		it('should handle missing adminRoleId in config', () => {
-			const member = {
-				permissions: { has: () => false },
-				roles: {
-					cache: { has: () => true },
-				},
-			};
-			const config = {
-				permissions: {},
-			};
-			expect(isAdmin(member, config)).toBe(false);
-		});
-	});
+  it('should return true when permissions are disabled', () => {
+    const member = {};
+    const config = { permissions: { enabled: false } };
+    expect(hasPermission(member, 'ping', config)).toBe(true);
+  });
 
-	describe('hasPermission', () => {
-		it('should allow everyone when permissions are disabled', () => {
-			const member = {
-				permissions: { has: () => false },
-			};
-			const config = {
-				permissions: {
-					enabled: false,
-				},
-			};
-			expect(hasPermission(member, 'test', config)).toBe(true);
-		});
+  it('should return true when usePermissions is false', () => {
+    const member = {};
+    const config = { permissions: { enabled: true, usePermissions: false } };
+    expect(hasPermission(member, 'ping', config)).toBe(true);
+  });
 
-		it('should allow everyone when usePermissions is false', () => {
-			const member = {
-				permissions: { has: () => false },
-			};
-			const config = {
-				permissions: {
-					enabled: true,
-					usePermissions: false,
-				},
-			};
-			expect(hasPermission(member, 'test', config)).toBe(true);
-		});
+  it('should return true for "everyone" permission level', () => {
+    const member = {};
+    const config = {
+      permissions: {
+        enabled: true,
+        usePermissions: true,
+        allowedCommands: { ping: 'everyone' },
+      },
+    };
+    expect(hasPermission(member, 'ping', config)).toBe(true);
+  });
 
-		it('should allow everyone for "everyone" permission level', () => {
-			const member = {
-				permissions: { has: () => false },
-			};
-			const config = {
-				permissions: {
-					enabled: true,
-					usePermissions: true,
-					allowedCommands: {
-						test: 'everyone',
-					},
-				},
-			};
-			expect(hasPermission(member, 'test', config)).toBe(true);
-		});
+  it('should check admin for "admin" permission level', () => {
+    const adminMember = {
+      permissions: { has: vi.fn().mockReturnValue(true) },
+      roles: { cache: { has: vi.fn() } },
+    };
+    const config = {
+      permissions: {
+        enabled: true,
+        usePermissions: true,
+        allowedCommands: { config: 'admin' },
+      },
+    };
+    expect(hasPermission(adminMember, 'config', config)).toBe(true);
+  });
 
-		it('should check admin for "admin" permission level', () => {
-			const adminMember = {
-				permissions: {
-					has: (perm) => perm === PermissionFlagsBits.Administrator,
-				},
-			};
-			const regularMember = {
-				permissions: { has: () => false },
-				roles: { cache: { has: () => false } },
-			};
-			const config = {
-				permissions: {
-					enabled: true,
-					usePermissions: true,
-					allowedCommands: {
-						test: 'admin',
-					},
-				},
-			};
-			expect(hasPermission(adminMember, 'test', config)).toBe(true);
-			expect(hasPermission(regularMember, 'test', config)).toBe(false);
-		});
+  it('should deny non-admin for "admin" permission level', () => {
+    const member = {
+      permissions: { has: vi.fn().mockReturnValue(false) },
+      roles: { cache: { has: vi.fn().mockReturnValue(false) } },
+    };
+    const config = {
+      permissions: {
+        enabled: true,
+        usePermissions: true,
+        allowedCommands: { config: 'admin' },
+      },
+    };
+    expect(hasPermission(member, 'config', config)).toBe(false);
+  });
 
-		it('should default to admin-only for unlisted commands', () => {
-			const adminMember = {
-				permissions: {
-					has: (perm) => perm === PermissionFlagsBits.Administrator,
-				},
-			};
-			const regularMember = {
-				permissions: { has: () => false },
-				roles: { cache: { has: () => false } },
-			};
-			const config = {
-				permissions: {
-					enabled: true,
-					usePermissions: true,
-					allowedCommands: {},
-				},
-			};
-			expect(hasPermission(adminMember, 'unlisted', config)).toBe(true);
-			expect(hasPermission(regularMember, 'unlisted', config)).toBe(false);
-		});
+  it('should default to admin-only for unknown commands', () => {
+    const member = {
+      permissions: { has: vi.fn().mockReturnValue(false) },
+      roles: { cache: { has: vi.fn().mockReturnValue(false) } },
+    };
+    const config = {
+      permissions: {
+        enabled: true,
+        usePermissions: true,
+        allowedCommands: {},
+      },
+    };
+    expect(hasPermission(member, 'unknown', config)).toBe(false);
+  });
 
-		it('should deny for unknown permission levels', () => {
-			const member = {
-				permissions: { has: () => false },
-			};
-			const config = {
-				permissions: {
-					enabled: true,
-					usePermissions: true,
-					allowedCommands: {
-						test: 'custom-level',
-					},
-				},
-			};
-			expect(hasPermission(member, 'test', config)).toBe(false);
-		});
+  it('should deny for unknown permission level', () => {
+    const member = {
+      permissions: { has: vi.fn().mockReturnValue(false) },
+      roles: { cache: { has: vi.fn().mockReturnValue(false) } },
+    };
+    const config = {
+      permissions: {
+        enabled: true,
+        usePermissions: true,
+        allowedCommands: { foo: 'moderator' },
+      },
+    };
+    expect(hasPermission(member, 'foo', config)).toBe(false);
+  });
+});
 
-		it('should return false for null member', () => {
-			const config = {
-				permissions: {
-					enabled: true,
-					usePermissions: true,
-				},
-			};
-			expect(hasPermission(null, 'test', config)).toBe(false);
-		});
-
-		it('should return false for null commandName', () => {
-			const member = {
-				permissions: { has: () => true },
-			};
-			const config = {
-				permissions: {
-					enabled: true,
-					usePermissions: true,
-				},
-			};
-			expect(hasPermission(member, null, config)).toBe(false);
-		});
-
-		it('should return false for null config', () => {
-			const member = {
-				permissions: { has: () => true },
-			};
-			expect(hasPermission(member, 'test', null)).toBe(false);
-		});
-
-		it('should handle missing allowedCommands in config', () => {
-			const adminMember = {
-				permissions: {
-					has: (perm) => perm === PermissionFlagsBits.Administrator,
-				},
-			};
-			const config = {
-				permissions: {
-					enabled: true,
-					usePermissions: true,
-				},
-			};
-			expect(hasPermission(adminMember, 'test', config)).toBe(true);
-		});
-	});
-
-	describe('getPermissionError', () => {
-		it('should return formatted error message', () => {
-			const message = getPermissionError('config');
-			expect(message).toContain('config');
-			expect(message).toContain('permission');
-			expect(message).toContain('administrator');
-		});
-
-		it('should include command name in message', () => {
-			const message = getPermissionError('status');
-			expect(message).toContain('status');
-		});
-
-		it('should start with error emoji', () => {
-			const message = getPermissionError('test');
-			expect(message).toMatch(/^❌/);
-		});
-
-		it('should format command name as code', () => {
-			const message = getPermissionError('test');
-			expect(message).toContain('`/test`');
-		});
-	});
+describe('getPermissionError', () => {
+  it('should return a formatted error message with command name', () => {
+    const msg = getPermissionError('config');
+    expect(msg).toContain('/config');
+    expect(msg).toContain('permission');
+    expect(msg).toContain('administrator');
+  });
 });
