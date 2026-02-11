@@ -15,19 +15,25 @@ const configPath = join(__dirname, '..', '..', 'config.json');
 /** @type {Object} In-memory config cache */
 let configCache = {};
 
+/** @type {Object|null} Cached config.json contents (invalidated on reset) */
+let fileConfigCache = null;
+
 /**
  * Load config.json from disk (used as seed/fallback)
  * @returns {Object} Configuration object from file
  * @throws {Error} If config.json is missing or unparseable
  */
 export function loadConfigFromFile() {
+  if (fileConfigCache) return fileConfigCache;
+
   if (!existsSync(configPath)) {
     const err = new Error('config.json not found!');
     err.code = 'CONFIG_NOT_FOUND';
     throw err;
   }
   try {
-    return JSON.parse(readFileSync(configPath, 'utf-8'));
+    fileConfigCache = JSON.parse(readFileSync(configPath, 'utf-8'));
+    return fileConfigCache;
   } catch (err) {
     throw new Error(`Failed to load config.json: ${err.message}`);
   }
