@@ -329,7 +329,9 @@ async function startup() {
     setPool(dbPool);
   }
 
-  // Load previous conversation state from file (fallback)
+  // TODO: loadState() is migration-only for file->DB persistence transition.
+  // When DB is available, initConversationHistory() effectively overwrites this state.
+  // Once all environments are DB-backed, remove this call and loadState/saveState helpers.
   loadState();
 
   // Hydrate conversation history from DB (overwrites file state if DB is available)
