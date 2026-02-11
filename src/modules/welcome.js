@@ -151,16 +151,14 @@ function getCommunitySnapshot(guild, settings) {
   const channelCounts = [];
 
   for (const [channelId, timestamps] of activityMap.entries()) {
-    while (timestamps.length && timestamps[0] < cutoff) {
-      timestamps.shift();
-    }
+    const recent = timestamps.filter(t => t >= cutoff);
 
-    if (!timestamps.length) {
+    if (!recent.length) {
       continue;
     }
 
-    messageCount += timestamps.length;
-    channelCounts.push({ channelId, count: timestamps.length });
+    messageCount += recent.length;
+    channelCounts.push({ channelId, count: recent.length });
   }
 
   const topChannelIds = channelCounts
