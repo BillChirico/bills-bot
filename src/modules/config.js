@@ -112,15 +112,12 @@ export async function setConfigValue(path, value) {
   }
 
   const section = parts[0];
-  const sectionConfig = { ...(configCache[section] || {}) };
 
-  // Ensure section exists in cache
-  if (!configCache[section]) {
-    configCache[section] = {};
-  }
+  // Create a deep clone of the section to avoid mutating cache before DB write succeeds
+  const sectionClone = JSON.parse(JSON.stringify(configCache[section] || {}));
 
-  // Navigate to the nested key and set the value (mutate in-place for reference propagation)
-  let current = configCache[section];
+  // Navigate to the nested key and set the value on the clone
+  let current = sectionClone;
   for (let i = 1; i < parts.length - 1; i++) {
     if (current[parts[i]] === undefined || typeof current[parts[i]] !== 'object') {
       current[parts[i]] = {};
@@ -129,16 +126,20 @@ export async function setConfigValue(path, value) {
   }
 
   const finalKey = parts[parts.length - 1];
-  current[finalKey] = parseValue(value);
+  const parsedValue = parseValue(value);
+  current[finalKey] = parsedValue;
 
-  // Update database
+  // Update database first, before modifying the cache
   const pool = getPool();
   await pool.query(
     'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
-    [section, JSON.stringify(configCache[section])]
+    [section, JSON.stringify(sectionClone)]
   );
 
-  info('Config updated', { path, value: current[finalKey] });
+  // Only update in-memory cache after DB write succeeds
+  configCache[section] = sectionClone;
+
+  info('Config updated', { path, value: parsedValue });
   return configCache[section];
 }
 
@@ -205,8 +206,15 @@ function parseValue(value) {
   // Null
   if (value === 'null') return null;
 
-  // Numbers
-  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  // Numbers (keep large integers as strings to preserve Discord snowflake IDs)
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    const num = Number(value);
+    // If it's an integer that exceeds MAX_SAFE_INTEGER, keep it as a string
+    if (Number.isInteger(num) && !Number.isSafeInteger(num)) {
+      return value;
+    }
+    return num;
+  }
 
   // JSON arrays/objects
   if ((value.startsWith('[') && value.endsWith(']')) || (value.startsWith('{') && value.endsWith('}'))) {

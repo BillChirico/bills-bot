@@ -234,12 +234,19 @@ async function handleSet(interaction) {
 
     const updatedSection = await setConfigValue(path, value);
 
+    // Traverse the full nested path to get the actual leaf value
+    const pathParts = path.split('.').slice(1);
+    let leafValue = updatedSection;
+    for (const part of pathParts) {
+      leafValue = leafValue?.[part];
+    }
+
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
       .setTitle('✅ Config Updated')
       .addFields(
         { name: 'Path', value: `\`${path}\``, inline: true },
-        { name: 'New Value', value: `\`${JSON.stringify(updatedSection[path.split('.').slice(1)[0]], null, 2) ?? value}\``, inline: true }
+        { name: 'New Value', value: `\`${JSON.stringify(leafValue, null, 2) ?? value}\``, inline: true }
       )
       .setFooter({ text: 'Changes take effect immediately' })
       .setTimestamp();
