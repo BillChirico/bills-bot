@@ -329,7 +329,8 @@ describe('events module', () => {
       expect(once).toHaveBeenCalledWith('clientReady', expect.any(Function));
       expect(on).toHaveBeenCalledWith('guildMemberAdd', expect.any(Function));
       expect(on).toHaveBeenCalledWith('messageCreate', expect.any(Function));
-      expect(on).toHaveBeenCalledWith('error', expect.any(Function));
+      // Note: Error handlers are now registered at module level in index.js
+      // to avoid duplicate Winston log entries
 
       process.on = originalOn;
     });

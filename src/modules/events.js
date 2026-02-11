@@ -149,5 +149,6 @@ export function registerEventHandlers(client, config, healthMonitor) {
   registerReadyHandler(client, config, healthMonitor);
   registerGuildMemberAddHandler(client, config);
   registerMessageCreateHandler(client, config, healthMonitor);
-  registerErrorHandlers(client);
+  // Note: Error handlers are registered at module level in index.js
+  // to avoid duplicate Winston log entries
 }
