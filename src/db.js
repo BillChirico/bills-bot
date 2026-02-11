@@ -15,6 +15,39 @@ let pool = null;
 let initializing = false;
 
 /**
+ * Determine SSL configuration based on DATABASE_SSL env var and connection string.
+ *
+ * DATABASE_SSL values:
+ *   "false" / "off"      → SSL disabled
+ *   "no-verify"          → SSL enabled but server cert not verified
+ *   "true" / "on" / unset → SSL enabled with full verification
+ *
+ * Railway internal connections always disable SSL regardless of env var.
+ *
+ * @param {string} connectionString - Database connection URL
+ * @returns {false|{rejectUnauthorized: boolean}} SSL config for pg.Pool
+ */
+function getSslConfig(connectionString) {
+  // Railway internal connections never need SSL
+  if (connectionString.includes('railway.internal')) {
+    return false;
+  }
+
+  const sslEnv = (process.env.DATABASE_SSL || '').toLowerCase().trim();
+
+  if (sslEnv === 'false' || sslEnv === 'off') {
+    return false;
+  }
+
+  if (sslEnv === 'no-verify') {
+    return { rejectUnauthorized: false };
+  }
+
+  // Default: SSL with full verification
+  return { rejectUnauthorized: true };
+}
+
+/**
  * Initialize the database connection pool and create schema
  * @returns {Promise<pg.Pool>} The connection pool
  */
@@ -36,12 +69,7 @@ export async function initDb() {
       max: 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
-      // Railway internal connections don't need SSL; others default to verified TLS
-      ssl: connectionString.includes('railway.internal')
-        ? false
-        : process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false'
-          ? { rejectUnauthorized: false }
-          : { rejectUnauthorized: true },
+      ssl: getSslConfig(connectionString),
     });
 
     // Prevent unhandled pool errors from crashing the process
