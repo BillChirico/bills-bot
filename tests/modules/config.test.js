@@ -9,10 +9,6 @@ vi.mock('../../src/logger.js', () => ({
 }));
 
 // Mock db module
-const _mockQuery = vi.fn();
-const _mockConnect = vi.fn();
-const _mockClientQuery = vi.fn();
-const _mockClientRelease = vi.fn();
 vi.mock('../../src/db.js', () => ({
   getPool: vi.fn(),
 }));
@@ -219,77 +215,84 @@ describe('modules/config', () => {
       );
     });
 
-    it('should update in-memory only when DB not available', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('DB not init');
+    describe('in-memory only (no DB)', () => {
+      beforeEach(async () => {
+        const { getPool: mockGetPool } = await import('../../src/db.js');
+        mockGetPool.mockImplementation(() => {
+          throw new Error('no db');
+        });
+        await configModule.loadConfig();
       });
 
-      // First load config so cache has data
-      await configModule.loadConfig();
-
-      const result = await configModule.setConfigValue('ai.model', 'new-model');
-      expect(result.model).toBe('new-model');
-      expect(configModule.getConfig().ai.model).toBe('new-model');
-    });
-
-    it('should parse boolean values', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
+      it('should update in-memory only when DB not available', async () => {
+        const result = await configModule.setConfigValue('ai.model', 'new-model');
+        expect(result.model).toBe('new-model');
+        expect(configModule.getConfig().ai.model).toBe('new-model');
       });
 
-      await configModule.loadConfig();
+      it('should parse boolean values', async () => {
+        await configModule.setConfigValue('ai.enabled', 'false');
+        expect(configModule.getConfig().ai.enabled).toBe(false);
 
-      await configModule.setConfigValue('ai.enabled', 'false');
-      expect(configModule.getConfig().ai.enabled).toBe(false);
-
-      await configModule.setConfigValue('ai.enabled', 'true');
-      expect(configModule.getConfig().ai.enabled).toBe(true);
-    });
-
-    it('should parse null values', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
+        await configModule.setConfigValue('ai.enabled', 'true');
+        expect(configModule.getConfig().ai.enabled).toBe(true);
       });
 
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.model', 'null');
-      expect(configModule.getConfig().ai.model).toBeNull();
-    });
-
-    it('should parse numeric values', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
+      it('should parse null values', async () => {
+        await configModule.setConfigValue('ai.model', 'null');
+        expect(configModule.getConfig().ai.model).toBeNull();
       });
 
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.maxTokens', '512');
-      expect(configModule.getConfig().ai.maxTokens).toBe(512);
-    });
-
-    it('should parse JSON array values', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
+      it('should parse numeric values', async () => {
+        await configModule.setConfigValue('ai.maxTokens', '512');
+        expect(configModule.getConfig().ai.maxTokens).toBe(512);
       });
 
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.channels', '["ch1","ch2"]');
-      expect(configModule.getConfig().ai.channels).toEqual(['ch1', 'ch2']);
-    });
-
-    it('should parse JSON string values', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
+      it('should parse JSON array values', async () => {
+        await configModule.setConfigValue('ai.channels', '["ch1","ch2"]');
+        expect(configModule.getConfig().ai.channels).toEqual(['ch1', 'ch2']);
       });
 
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.model', '"literal-string"');
-      expect(configModule.getConfig().ai.model).toBe('literal-string');
+      it('should parse JSON string values', async () => {
+        await configModule.setConfigValue('ai.model', '"literal-string"');
+        expect(configModule.getConfig().ai.model).toBe('literal-string');
+      });
+
+      it('should create intermediate objects for nested paths', async () => {
+        await configModule.setConfigValue('ai.deep.nested.key', 'value');
+        expect(configModule.getConfig().ai.deep.nested.key).toBe('value');
+      });
+
+      it('should handle floats and keep precision', async () => {
+        await configModule.setConfigValue('ai.temperature', '0.7');
+        expect(configModule.getConfig().ai.temperature).toBe(0.7);
+      });
+
+      it('should keep unsafe integers as strings', async () => {
+        await configModule.setConfigValue('ai.bigNum', '99999999999999999999');
+        expect(configModule.getConfig().ai.bigNum).toBe('99999999999999999999');
+      });
+
+      it('should keep invalid JSON parse attempts as strings', async () => {
+        await configModule.setConfigValue('ai.bad', '[invalid');
+        expect(configModule.getConfig().ai.bad).toBe('[invalid');
+      });
+
+      it('should parse JSON objects', async () => {
+        await configModule.setConfigValue('ai.obj', '{"key":"val"}');
+        expect(configModule.getConfig().ai.obj).toEqual({ key: 'val' });
+      });
+
+      it('should handle Infinity as string', async () => {
+        // Infinity doesn't match the numeric regex so stays as string
+        await configModule.setConfigValue('ai.val', 'Infinity');
+        expect(configModule.getConfig().ai.val).toBe('Infinity');
+      });
+
+      it('should handle non-string values passed directly', async () => {
+        await configModule.setConfigValue('ai.num', 42);
+        expect(configModule.getConfig().ai.num).toBe(42);
+      });
     });
 
     it('should persist to database when available', async () => {
@@ -340,17 +343,6 @@ describe('modules/config', () => {
       await expect(configModule.setConfigValue('ai.model', 'bad')).rejects.toThrow('UPDATE failed');
     });
 
-    it('should create intermediate objects for nested paths', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
-      });
-
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.deep.nested.key', 'value');
-      expect(configModule.getConfig().ai.deep.nested.key).toBe('value');
-    });
-
     it('should create new section if it does not exist', async () => {
       const mockClient = {
         query: vi
@@ -373,67 +365,6 @@ describe('modules/config', () => {
       await configModule.loadConfig();
       await configModule.setConfigValue('newSection.key', 'value');
       expect(configModule.getConfig().newSection.key).toBe('value');
-    });
-
-    it('should handle floats and keep precision', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
-      });
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.temperature', '0.7');
-      expect(configModule.getConfig().ai.temperature).toBe(0.7);
-    });
-
-    it('should keep unsafe integers as strings', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
-      });
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.bigNum', '99999999999999999999');
-      expect(configModule.getConfig().ai.bigNum).toBe('99999999999999999999');
-    });
-
-    it('should keep invalid JSON parse attempts as strings', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
-      });
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.bad', '[invalid');
-      expect(configModule.getConfig().ai.bad).toBe('[invalid');
-    });
-
-    it('should parse JSON objects', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
-      });
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.obj', '{"key":"val"}');
-      expect(configModule.getConfig().ai.obj).toEqual({ key: 'val' });
-    });
-
-    it('should handle Infinity as string', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
-      });
-      await configModule.loadConfig();
-      // Infinity doesn't match the numeric regex so stays as string
-      await configModule.setConfigValue('ai.val', 'Infinity');
-      expect(configModule.getConfig().ai.val).toBe('Infinity');
-    });
-
-    it('should handle non-string values passed directly', async () => {
-      const { getPool: mockGetPool } = await import('../../src/db.js');
-      mockGetPool.mockImplementation(() => {
-        throw new Error('no db');
-      });
-      await configModule.loadConfig();
-      await configModule.setConfigValue('ai.num', 42);
-      expect(configModule.getConfig().ai.num).toBe(42);
     });
   });
 
@@ -523,6 +454,11 @@ describe('modules/config', () => {
       expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
     });
 
+    // NOTE: The following 3 tests directly mutate the getConfig() return value.
+    // This works because getConfig() returns a live reference to the internal
+    // cache object. If the implementation changes to return a copy/clone,
+    // these tests will break and need to be updated.
+
     it('should remove stale keys from cache on full reset', async () => {
       const { getPool: mockGetPool } = await import('../../src/db.js');
       mockGetPool.mockImplementation(() => {
@@ -530,7 +466,7 @@ describe('modules/config', () => {
       });
 
       await configModule.loadConfig();
-      // Manually add a stale key
+      // Directly mutates the live cache reference to inject a stale key
       configModule.getConfig().staleKey = { foo: 'bar' };
 
       await configModule.resetConfig();
@@ -544,7 +480,7 @@ describe('modules/config', () => {
       });
 
       await configModule.loadConfig();
-      // Replace section with a non-object
+      // Directly mutates the live cache reference to replace section with a non-object
       configModule.getConfig().welcome = 'not-an-object';
 
       await configModule.resetConfig('welcome');
@@ -558,6 +494,7 @@ describe('modules/config', () => {
       });
 
       await configModule.loadConfig();
+      // Directly mutates the live cache reference to replace section with a string
       configModule.getConfig().ai = 'string-value';
 
       await configModule.resetConfig();

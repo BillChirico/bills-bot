@@ -73,11 +73,13 @@ vi.mock('discord.js', () => {
     }
 
     once(event, cb) {
-      mocks.onceHandlers[event] = cb;
+      if (!mocks.onceHandlers[event]) mocks.onceHandlers[event] = [];
+      mocks.onceHandlers[event].push(cb);
     }
 
     on(event, cb) {
-      mocks.onHandlers[event] = cb;
+      if (!mocks.onHandlers[event]) mocks.onHandlers[event] = [];
+      mocks.onHandlers[event].push(cb);
     }
   }
 
@@ -223,7 +225,10 @@ async function importIndex({
   });
 
   const mod = await import('../src/index.js');
-  // Allow startup() microtasks to complete
+  // Pragmatic workaround: settle async microtasks from startup().
+  // The 3 hops (2x Promise.resolve + 1x setImmediate) are coupled to
+  // the current async hop count in startup(). If startup() gains more
+  // awaits, this settling sequence may need to be extended.
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setImmediate(resolve));
@@ -287,7 +292,7 @@ describe('index.js', () => {
     const autocomplete = vi.fn().mockResolvedValue(undefined);
     mocks.client.commands.set('config', { autocomplete });
 
-    const interactionHandler = mocks.onHandlers.interactionCreate;
+    const interactionHandler = mocks.onHandlers.interactionCreate[0];
     const interaction = {
       isAutocomplete: () => true,
       commandName: 'config',
@@ -303,7 +308,7 @@ describe('index.js', () => {
     const autocomplete = vi.fn().mockRejectedValue(new Error('autocomplete fail'));
     mocks.client.commands.set('config', { autocomplete });
 
-    const interactionHandler = mocks.onHandlers.interactionCreate;
+    const interactionHandler = mocks.onHandlers.interactionCreate[0];
     const interaction = {
       isAutocomplete: () => true,
       commandName: 'config',
@@ -319,7 +324,7 @@ describe('index.js', () => {
   it('should ignore non-chat interactions', async () => {
     await importIndex({ token: 'abc', databaseUrl: null });
 
-    const interactionHandler = mocks.onHandlers.interactionCreate;
+    const interactionHandler = mocks.onHandlers.interactionCreate[0];
     const interaction = {
       isAutocomplete: () => false,
       isChatInputCommand: () => false,
@@ -334,7 +339,7 @@ describe('index.js', () => {
     mocks.permissions.hasPermission.mockReturnValue(false);
     mocks.permissions.getPermissionError.mockReturnValue('denied');
 
-    const interactionHandler = mocks.onHandlers.interactionCreate;
+    const interactionHandler = mocks.onHandlers.interactionCreate[0];
     const interaction = {
       isAutocomplete: () => false,
       isChatInputCommand: () => true,
@@ -352,7 +357,7 @@ describe('index.js', () => {
     await importIndex({ token: 'abc', databaseUrl: null });
     mocks.permissions.hasPermission.mockReturnValue(true);
 
-    const interactionHandler = mocks.onHandlers.interactionCreate;
+    const interactionHandler = mocks.onHandlers.interactionCreate[0];
     const interaction = {
       isAutocomplete: () => false,
       isChatInputCommand: () => true,
@@ -375,7 +380,7 @@ describe('index.js', () => {
     const execute = vi.fn().mockResolvedValue(undefined);
     mocks.client.commands.set('ping', { execute });
 
-    const interactionHandler = mocks.onHandlers.interactionCreate;
+    const interactionHandler = mocks.onHandlers.interactionCreate[0];
     const interaction = {
       isAutocomplete: () => false,
       isChatInputCommand: () => true,
@@ -395,7 +400,7 @@ describe('index.js', () => {
     const execute = vi.fn().mockRejectedValue(new Error('boom'));
     mocks.client.commands.set('ping', { execute });
 
-    const interactionHandler = mocks.onHandlers.interactionCreate;
+    const interactionHandler = mocks.onHandlers.interactionCreate[0];
     const interaction = {
       isAutocomplete: () => false,
       isChatInputCommand: () => true,
@@ -421,7 +426,7 @@ describe('index.js', () => {
     const execute = vi.fn().mockRejectedValue(new Error('boom'));
     mocks.client.commands.set('ping', { execute });
 
-    const interactionHandler = mocks.onHandlers.interactionCreate;
+    const interactionHandler = mocks.onHandlers.interactionCreate[0];
     const interaction = {
       isAutocomplete: () => false,
       isChatInputCommand: () => true,
@@ -446,7 +451,7 @@ describe('index.js', () => {
 
     mocks.client.commands.set('ping', { data: { name: 'ping' }, execute: vi.fn() });
 
-    await mocks.onceHandlers.clientReady();
+    await mocks.onceHandlers.clientReady[0]();
 
     expect(mocks.registerCommands).toHaveBeenCalledWith(
       Array.from(mocks.client.commands.values()),
@@ -461,7 +466,7 @@ describe('index.js', () => {
 
     mocks.registerCommands.mockRejectedValueOnce(new Error('register fail'));
 
-    await mocks.onceHandlers.clientReady();
+    await mocks.onceHandlers.clientReady[0]();
 
     expect(mocks.logger.error).toHaveBeenCalledWith('Command registration failed', {
       error: 'register fail',
@@ -513,7 +518,7 @@ describe('index.js', () => {
   it('should log discord client error events', async () => {
     await importIndex({ token: 'abc', databaseUrl: null });
 
-    mocks.onHandlers.error({ message: 'discord broke', stack: 'stack', code: 500 });
+    mocks.onHandlers.error[0]({ message: 'discord broke', stack: 'stack', code: 500 });
 
     expect(mocks.logger.error).toHaveBeenCalledWith('Discord client error', {
       error: 'discord broke',

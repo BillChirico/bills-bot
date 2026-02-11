@@ -289,23 +289,23 @@ describe('events module', () => {
       const on = vi.fn();
       const client = { on };
 
-      const originalOn = process.on;
-      const processOn = vi.fn();
-      process.on = processOn;
+      const processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
 
       registerErrorHandlers(client);
 
       expect(on).toHaveBeenCalledWith('error', expect.any(Function));
-      expect(processOn).toHaveBeenCalledWith('unhandledRejection', expect.any(Function));
+      expect(processOnSpy).toHaveBeenCalledWith('unhandledRejection', expect.any(Function));
 
       // Trigger handlers to cover the logging code
       const errorCallback = on.mock.calls[0][1];
       errorCallback(new Error('test error'));
 
-      const rejectionCallback = processOn.mock.calls[0][1];
+      const rejectionCallback = processOnSpy.mock.calls.find(
+        (call) => call[0] === 'unhandledRejection',
+      )[1];
       rejectionCallback(new Error('rejection'));
 
-      process.on = originalOn;
+      processOnSpy.mockRestore();
     });
   });
 
@@ -321,8 +321,7 @@ describe('events module', () => {
       };
       const config = {};
 
-      const originalOn = process.on;
-      process.on = vi.fn();
+      const processOnSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
 
       registerEventHandlers(client, config, null);
 
@@ -331,7 +330,7 @@ describe('events module', () => {
       expect(on).toHaveBeenCalledWith('messageCreate', expect.any(Function));
       expect(on).toHaveBeenCalledWith('error', expect.any(Function));
 
-      process.on = originalOn;
+      processOnSpy.mockRestore();
     });
   });
 });

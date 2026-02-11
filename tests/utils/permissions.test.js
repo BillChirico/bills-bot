@@ -128,6 +128,21 @@ describe('hasPermission', () => {
     expect(hasPermission(member, 'unknown', config)).toBe(false);
   });
 
+  it('should grant admin access to unknown commands', () => {
+    const adminMember = {
+      permissions: { has: vi.fn().mockReturnValue(true) },
+      roles: { cache: { has: vi.fn() } },
+    };
+    const config = {
+      permissions: {
+        enabled: true,
+        usePermissions: true,
+        allowedCommands: {},
+      },
+    };
+    expect(hasPermission(adminMember, 'unknown', config)).toBe(true);
+  });
+
   it('should deny for unknown permission level', () => {
     const member = {
       permissions: { has: vi.fn().mockReturnValue(false) },

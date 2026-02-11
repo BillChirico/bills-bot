@@ -76,6 +76,11 @@ describe('status command', () => {
 
     await execute(interaction);
     expect(mockReply).toHaveBeenCalledWith(expect.objectContaining({ embeds: expect.any(Array) }));
+
+    // Verify the 'ok' status produces the green emoji
+    const embed = mockReply.mock.calls[0][0].embeds[0];
+    const apiField = embed.data.fields.find((f) => f.name.includes('API'));
+    expect(apiField.value).toContain('🟢');
   });
 
   it('should deny non-admin from detailed view', async () => {
@@ -171,6 +176,13 @@ describe('status command', () => {
   });
 
   describe('formatRelativeTime branches', () => {
+    /** Helper: extract the 'Last AI Request' field value from the reply embed */
+    function getLastAIRequestField(mockReply) {
+      const embed = mockReply.mock.calls[0][0].embeds[0];
+      const field = embed.data.fields.find((f) => f.name.includes('Last AI Request'));
+      return field?.value;
+    }
+
     it('should show "Never" when lastAIRequest is null', async () => {
       healthMocks.monitor.getStatus.mockReturnValueOnce({
         uptime: 60000,
@@ -187,6 +199,7 @@ describe('status command', () => {
       };
       await execute(interaction);
       expect(mockReply).toHaveBeenCalled();
+      expect(getLastAIRequestField(mockReply)).toBe('Never');
     });
 
     it('should show "Just now" when lastAIRequest is within 1 second', async () => {
@@ -205,6 +218,7 @@ describe('status command', () => {
       };
       await execute(interaction);
       expect(mockReply).toHaveBeenCalled();
+      expect(getLastAIRequestField(mockReply)).toBe('Just now');
     });
 
     it('should show minutes ago when lastAIRequest is minutes old', async () => {
@@ -223,6 +237,7 @@ describe('status command', () => {
       };
       await execute(interaction);
       expect(mockReply).toHaveBeenCalled();
+      expect(getLastAIRequestField(mockReply)).toBe('5m ago');
     });
 
     it('should show hours ago when lastAIRequest is hours old', async () => {
@@ -241,6 +256,7 @@ describe('status command', () => {
       };
       await execute(interaction);
       expect(mockReply).toHaveBeenCalled();
+      expect(getLastAIRequestField(mockReply)).toBe('2h ago');
     });
 
     it('should show days ago when lastAIRequest is days old', async () => {
@@ -259,10 +275,18 @@ describe('status command', () => {
       };
       await execute(interaction);
       expect(mockReply).toHaveBeenCalled();
+      expect(getLastAIRequestField(mockReply)).toBe('2d ago');
     });
   });
 
   describe('getStatusEmoji branches', () => {
+    /** Helper: extract the 'API Status' field value from the reply embed */
+    function getAPIStatusField(mockReply) {
+      const embed = mockReply.mock.calls[0][0].embeds[0];
+      const field = embed.data.fields.find((f) => f.name.includes('API'));
+      return field?.value;
+    }
+
     it('should show error emoji for error status', async () => {
       healthMocks.monitor.getStatus.mockReturnValueOnce({
         uptime: 60000,
@@ -279,6 +303,7 @@ describe('status command', () => {
       };
       await execute(interaction);
       expect(mockReply).toHaveBeenCalled();
+      expect(getAPIStatusField(mockReply)).toContain('🔴');
     });
 
     it('should show unknown emoji for unknown status', async () => {
@@ -297,6 +322,7 @@ describe('status command', () => {
       };
       await execute(interaction);
       expect(mockReply).toHaveBeenCalled();
+      expect(getAPIStatusField(mockReply)).toContain('🟡');
     });
 
     it('should show default emoji for unrecognized status', async () => {
@@ -315,6 +341,7 @@ describe('status command', () => {
       };
       await execute(interaction);
       expect(mockReply).toHaveBeenCalled();
+      expect(getAPIStatusField(mockReply)).toContain('⚪');
     });
   });
 

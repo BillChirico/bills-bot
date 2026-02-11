@@ -50,25 +50,29 @@ describe('chimeIn module', () => {
 
   describe('accumulate', () => {
     it('should do nothing if chimeIn is disabled', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
       const message = {
         channel: { id: 'c1' },
         content: 'hello',
         author: { username: 'user' },
       };
       await chimeInModule.accumulate(message, { chimeIn: { enabled: false } });
-      // No error = pass
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('should do nothing if chimeIn config is missing', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
       const message = {
         channel: { id: 'c1' },
         content: 'hello',
         author: { username: 'user' },
       };
       await chimeInModule.accumulate(message, {});
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('should skip excluded channels', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
       const message = {
         channel: { id: 'excluded-ch' },
         content: 'hello',
@@ -77,24 +81,29 @@ describe('chimeIn module', () => {
       await chimeInModule.accumulate(message, {
         chimeIn: { enabled: true, excludeChannels: ['excluded-ch'] },
       });
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('should skip empty messages', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
       const message = {
         channel: { id: 'c1' },
         content: '',
         author: { username: 'user' },
       };
       await chimeInModule.accumulate(message, { chimeIn: { enabled: true } });
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('should skip whitespace-only messages', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
       const message = {
         channel: { id: 'c1' },
         content: '   ',
         author: { username: 'user' },
       };
       await chimeInModule.accumulate(message, { chimeIn: { enabled: true } });
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('should accumulate messages without triggering eval below threshold', async () => {
@@ -164,6 +173,7 @@ describe('chimeIn module', () => {
     });
 
     it('should respect allowed channels list', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
       const config = {
         chimeIn: { enabled: true, evaluateEvery: 1, channels: ['allowed-ch'] },
       };
@@ -173,7 +183,8 @@ describe('chimeIn module', () => {
         author: { username: 'user' },
       };
       await chimeInModule.accumulate(message, config);
-      // Should not trigger any fetch since channel is not allowed
+      // Should not trigger any fetch since channel is not in the allowed list
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('should handle evaluation API error gracefully', async () => {

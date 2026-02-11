@@ -8,7 +8,12 @@ describe('HealthMonitor', () => {
     vi.resetModules();
     const mod = await import('../../src/utils/health.js');
     HealthMonitor = mod.HealthMonitor;
-    // Clear singleton
+    // FRAGILE COUPLING: We directly set HealthMonitor.instance = null to reset
+    // the singleton between tests. This relies on the internal implementation
+    // detail that the singleton is stored as a static 'instance' property.
+    // A cleaner approach would be a static resetInstance() method, but that
+    // would add test-only code to production. If the singleton storage changes,
+    // these tests will need updating.
     HealthMonitor.instance = null;
   });
 

@@ -70,6 +70,20 @@ describe('isSpam', () => {
 });
 
 describe('sendSpamAlert', () => {
+  it('should not send alert if config.moderation is undefined', async () => {
+    const message = {
+      author: { id: '123' },
+      channel: { id: '456' },
+      content: 'spam',
+      url: 'http://test',
+    };
+    const client = { channels: { fetch: vi.fn() } };
+    const config = {};
+
+    await sendSpamAlert(message, client, config);
+    expect(client.channels.fetch).not.toHaveBeenCalled();
+  });
+
   it('should not send alert if no alertChannelId configured', async () => {
     const message = {
       author: { id: '123' },
@@ -115,6 +129,8 @@ describe('sendSpamAlert', () => {
     await sendSpamAlert(message, client, config);
     expect(client.channels.fetch).toHaveBeenCalledWith('789');
     expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ embeds: expect.any(Array) }));
+    // autoDelete is not enabled, so message.delete should NOT be called
+    expect(message.delete).not.toHaveBeenCalled();
   });
 
   it('should auto-delete message if autoDelete is enabled', async () => {
