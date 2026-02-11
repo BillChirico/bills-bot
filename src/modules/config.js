@@ -225,14 +225,14 @@ export async function resetConfig(section) {
       );
     }
 
-    // Mutate in-place so references stay valid
+    // Mutate in-place so references stay valid (deep clone to avoid shared refs)
     const sectionData = configCache[section];
     if (sectionData && typeof sectionData === 'object') {
       for (const key of Object.keys(sectionData)) delete sectionData[key];
-      Object.assign(sectionData, fileConfig[section]);
+      Object.assign(sectionData, structuredClone(fileConfig[section]));
     } else {
       configCache[section] = isPlainObject(fileConfig[section])
-        ? { ...fileConfig[section] }
+        ? structuredClone(fileConfig[section])
         : fileConfig[section];
     }
     info('Config section reset', { section });
@@ -257,13 +257,13 @@ export async function resetConfig(section) {
       }
     }
 
-    // Mutate in-place
+    // Mutate in-place (deep clone to avoid shared refs with fileConfigCache)
     for (const [key, value] of Object.entries(fileConfig)) {
       if (configCache[key] && isPlainObject(configCache[key]) && isPlainObject(value)) {
         for (const k of Object.keys(configCache[key])) delete configCache[key][k];
-        Object.assign(configCache[key], value);
+        Object.assign(configCache[key], structuredClone(value));
       } else {
-        configCache[key] = isPlainObject(value) ? { ...value } : value;
+        configCache[key] = isPlainObject(value) ? structuredClone(value) : value;
       }
     }
     info('All config reset to defaults');
