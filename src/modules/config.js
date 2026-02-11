@@ -137,7 +137,6 @@ export async function setConfigValue(path, value) {
   }
 
   const section = parts[0];
-  const finalKey = parts[parts.length - 1];
   const parsedVal = parseValue(value);
 
   // Deep clone the section for the INSERT case (new section that doesn't exist yet)
