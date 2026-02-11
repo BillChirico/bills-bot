@@ -318,7 +318,7 @@ function setNestedValue(root, pathParts, value) {
   }
   let current = root;
   for (let i = 0; i < pathParts.length - 1; i++) {
-    if (current[pathParts[i]] === undefined || typeof current[pathParts[i]] !== 'object') {
+    if (current[pathParts[i]] == null || typeof current[pathParts[i]] !== 'object' || Array.isArray(current[pathParts[i]])) {
       current[pathParts[i]] = {};
     }
     current = current[pathParts[i]];
