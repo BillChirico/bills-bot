@@ -240,7 +240,11 @@ export async function resetConfig(section) {
     }
     info('Config section reset', { section });
   } else {
-    // Reset all inside a transaction
+    // Reset all known sections to config.json defaults.
+    // Note: This intentionally only resets sections present in config.json.
+    // Sections added at runtime via setConfigValue that aren't in config.json
+    // are preserved — full reset restores known defaults, it doesn't purge
+    // dynamically-added sections from the DB or in-memory cache.
     if (pool) {
       const client = await pool.connect();
       try {
