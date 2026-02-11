@@ -24,7 +24,7 @@ Use descriptive branch names with prefixes:
 
 We use [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 feat: add music playback command
 fix: prevent crash on empty welcome channel
 chore: update discord.js to v14.16

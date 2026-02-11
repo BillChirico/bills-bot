@@ -3,6 +3,7 @@
  * Handles Discord event listeners and handlers
  */
 
+import { Events } from 'discord.js';
 import { info, error as logError, warn } from '../logger.js';
 import { needsSplitting, splitMessage } from '../utils/splitMessage.js';
 import { generateResponse } from './ai.js';
@@ -17,7 +18,7 @@ import { recordCommunityActivity, sendWelcomeMessage } from './welcome.js';
  * @param {Object} healthMonitor - Health monitor instance
  */
 export function registerReadyHandler(client, config, healthMonitor) {
-  client.once('clientReady', () => {
+  client.once(Events.ClientReady, () => {
     info(`${client.user.tag} is online`, { servers: client.guilds.cache.size });
 
     // Record bot start time
@@ -62,7 +63,7 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
 
     // Spam detection
     if (config.moderation?.enabled && isSpam(message.content)) {
-      warn('Spam detected', { user: message.author.tag, content: message.content.slice(0, 50) });
+      warn('Spam detected', { userId: message.author.id, contentPreview: '[redacted]' });
       await sendSpamAlert(message, client, config);
       return;
     }
@@ -120,7 +121,7 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
 
     // Chime-in: accumulate message for organic participation (fire-and-forget)
     accumulate(message, config).catch((err) => {
-      logError('ChimeIn accumulate error', { error: err.message });
+      logError('ChimeIn accumulate error', { error: err?.message });
     });
   });
 }

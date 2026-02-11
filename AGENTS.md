@@ -8,7 +8,7 @@
 
 ## Stack
 
-- **Runtime:** Node.js 18+ (ESM modules, `"type": "module"`)
+- **Runtime:** Node.js 22 (ESM modules, `"type": "module"`)
 - **Framework:** discord.js v14
 - **Database:** PostgreSQL (via `pg` — raw SQL, no ORM)
 - **Logging:** Winston with daily file rotation
@@ -88,7 +88,7 @@ export async function execute(interaction) {
 ```
 
 2. Commands are auto-discovered from `src/commands/` on startup
-3. Run `pnpm deploy` to register with Discord (or restart the bot)
+3. Run `pnpm run deploy` to register with Discord (or restart the bot)
 4. Add permission in `config.json` under `permissions.allowedCommands`
 
 ## How to Add a Module

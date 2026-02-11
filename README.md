@@ -18,7 +18,7 @@ AI-powered Discord bot for the [Volvox](https://volvox.dev) developer community.
 
 ## 🏗️ Architecture
 
-```
+```text
 Discord User
      │
      ▼
