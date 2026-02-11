@@ -64,7 +64,7 @@ export async function loadConfig() {
         throw new Error('No configuration source available: config.json is missing and database is not initialized');
       }
       info('Database not available, using config.json');
-      configCache = { ...fileConfig };
+      configCache = structuredClone(fileConfig);
       return configCache;
     }
 
@@ -88,7 +88,7 @@ export async function loadConfig() {
         }
         await client.query('COMMIT');
         info('Config seeded to database');
-        configCache = { ...fileConfig };
+        configCache = structuredClone(fileConfig);
       } catch (txErr) {
         try { await client.query('ROLLBACK'); } catch { /* ignore rollback failure */ }
         throw txErr;
@@ -109,7 +109,7 @@ export async function loadConfig() {
       throw err;
     }
     logError('Failed to load config from database, using config.json', { error: err.message });
-    configCache = { ...fileConfig };
+    configCache = structuredClone(fileConfig);
   }
 
   return configCache;
@@ -137,7 +137,6 @@ export async function setConfigValue(path, value) {
   }
 
   const section = parts[0];
-  const finalKey = parts[parts.length - 1];
   const parsedVal = parseValue(value);
 
   // Deep clone the section for the INSERT case (new section that doesn't exist yet)
@@ -230,11 +229,9 @@ export async function resetConfig(section) {
     const sectionData = configCache[section];
     if (sectionData && typeof sectionData === 'object') {
       for (const key of Object.keys(sectionData)) delete sectionData[key];
-      Object.assign(sectionData, fileConfig[section]);
+      Object.assign(sectionData, structuredClone(fileConfig[section]));
     } else {
-      configCache[section] = isPlainObject(fileConfig[section])
-        ? { ...fileConfig[section] }
-        : fileConfig[section];
+      configCache[section] = structuredClone(fileConfig[section]);
     }
     info('Config section reset', { section });
   } else {
@@ -262,9 +259,9 @@ export async function resetConfig(section) {
     for (const [key, value] of Object.entries(fileConfig)) {
       if (configCache[key] && isPlainObject(configCache[key]) && isPlainObject(value)) {
         for (const k of Object.keys(configCache[key])) delete configCache[key][k];
-        Object.assign(configCache[key], value);
+        Object.assign(configCache[key], structuredClone(value));
       } else {
-        configCache[key] = isPlainObject(value) ? { ...value } : value;
+        configCache[key] = structuredClone(value);
       }
     }
     info('All config reset to defaults');
@@ -283,7 +280,7 @@ export async function resetConfig(section) {
 function setNestedValue(root, pathParts, value) {
   let current = root;
   for (let i = 0; i < pathParts.length - 1; i++) {
-    if (current[pathParts[i]] === undefined || typeof current[pathParts[i]] !== 'object') {
+    if (current[pathParts[i]] == null || typeof current[pathParts[i]] !== 'object') {
       current[pathParts[i]] = {};
     }
     current = current[pathParts[i]];

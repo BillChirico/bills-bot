@@ -211,17 +211,40 @@ function getActivityLevel(messageCount, voiceParticipants) {
 function buildVibeLine(snapshot, suggestedChannels) {
   const topChannels = snapshot.topChannelIds.map(id => `<#${id}>`);
   const channelText = (topChannels.length ? topChannels : suggestedChannels).slice(0, 2).join(' + ');
+  const hasChannelText = channelText.length > 0;
+  const hasTextActivity = snapshot.messageCount > 0;
 
   switch (snapshot.level) {
     case 'hype':
+      if (!hasChannelText) {
+        return snapshot.voiceParticipants > 0
+          ? `The place is buzzing right now - ${snapshot.voiceParticipants} people in voice and the energy is high.`
+          : `The place is buzzing right now - jump in and say hello.`;
+      }
       return `The place is buzzing right now - big energy in ${channelText}.`;
     case 'busy':
+      if (!hasChannelText || !hasTextActivity) {
+        return snapshot.voiceParticipants > 0
+          ? `Good timing: ${snapshot.voiceParticipants} people are active in voice right now.`
+          : `Good timing: the community is active right now.`;
+      }
       return `Good timing: chat is active (${snapshot.messageCount} messages recently), especially in ${channelText}.`;
     case 'steady':
+      if (!hasChannelText) {
+        return snapshot.voiceParticipants > 0
+          ? `Things are moving at a healthy pace with ${snapshot.voiceParticipants} people in voice, so you'll fit right in.`
+          : `Things are moving at a healthy pace, so you'll fit right in.`;
+      }
       return `Things are moving at a healthy pace in ${channelText}, so you'll fit right in.`;
     case 'light':
       if (snapshot.voiceChannels > 0) {
+        if (!hasChannelText) {
+          return `${snapshot.voiceParticipants} people are hanging out in voice right now - feel free to join in.`;
+        }
         return `${snapshot.voiceParticipants} people are hanging out in voice right now, and ${channelText} is waking up.`;
+      }
+      if (!hasChannelText) {
+        return `It's a chill moment - perfect time to introduce yourself.`;
       }
       return `It's a chill moment, but ${channelText} is where people are checking in.`;
     default:
