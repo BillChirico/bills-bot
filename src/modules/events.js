@@ -127,20 +127,6 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
 }
 
 /**
- * Register error event handlers
- * @param {Object} client - Discord client
- */
-export function registerErrorHandlers(client) {
-  client.on('error', (err) => {
-    logError('Discord error', { error: err.message, stack: err.stack });
-  });
-
-  process.on('unhandledRejection', (err) => {
-    logError('Unhandled rejection', { error: err?.message, stack: err?.stack });
-  });
-}
-
-/**
  * Register all event handlers
  * @param {Object} client - Discord client
  * @param {Object} config - Bot configuration
@@ -150,5 +136,5 @@ export function registerEventHandlers(client, config, healthMonitor) {
   registerReadyHandler(client, config, healthMonitor);
   registerGuildMemberAddHandler(client, config);
   registerMessageCreateHandler(client, config, healthMonitor);
-  registerErrorHandlers(client);
+  // Note: Error handlers are registered in index.js with richer metadata
 }

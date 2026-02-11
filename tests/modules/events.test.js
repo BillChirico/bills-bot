@@ -40,7 +40,6 @@ vi.mock('../../src/utils/splitMessage.js', () => ({
 import { generateResponse } from '../../src/modules/ai.js';
 import { accumulate, resetCounter } from '../../src/modules/chimeIn.js';
 import {
-  registerErrorHandlers,
   registerEventHandlers,
   registerGuildMemberAddHandler,
   registerMessageCreateHandler,
@@ -284,31 +283,6 @@ describe('events module', () => {
     });
   });
 
-  describe('registerErrorHandlers', () => {
-    it('should register error and unhandledRejection handlers', () => {
-      const on = vi.fn();
-      const client = { on };
-
-      const originalOn = process.on;
-      const processOn = vi.fn();
-      process.on = processOn;
-
-      registerErrorHandlers(client);
-
-      expect(on).toHaveBeenCalledWith('error', expect.any(Function));
-      expect(processOn).toHaveBeenCalledWith('unhandledRejection', expect.any(Function));
-
-      // Trigger handlers to cover the logging code
-      const errorCallback = on.mock.calls[0][1];
-      errorCallback(new Error('test error'));
-
-      const rejectionCallback = processOn.mock.calls[0][1];
-      rejectionCallback(new Error('rejection'));
-
-      process.on = originalOn;
-    });
-  });
-
   describe('registerEventHandlers', () => {
     it('should register all handlers', () => {
       const once = vi.fn();
@@ -321,17 +295,12 @@ describe('events module', () => {
       };
       const config = {};
 
-      const originalOn = process.on;
-      process.on = vi.fn();
-
       registerEventHandlers(client, config, null);
 
       expect(once).toHaveBeenCalledWith('clientReady', expect.any(Function));
       expect(on).toHaveBeenCalledWith('guildMemberAdd', expect.any(Function));
       expect(on).toHaveBeenCalledWith('messageCreate', expect.any(Function));
-      expect(on).toHaveBeenCalledWith('error', expect.any(Function));
-
-      process.on = originalOn;
+      // Note: Error handlers are registered in index.js with richer metadata
     });
   });
 });
