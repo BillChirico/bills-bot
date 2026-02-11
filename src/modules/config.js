@@ -370,7 +370,8 @@ function parseValue(value) {
   if (value === 'null') return null;
 
   // Numbers (keep as string if beyond safe integer range to avoid precision loss)
-  if (/^-?\d+(\.\d+)?$/.test(value)) {
+  // Matches: 123, -123, 1.5, -1.5, 1., .5, -.5
+  if (/^-?(\d+\.?\d*|\.\d+)$/.test(value)) {
     const num = Number(value);
     if (!Number.isFinite(num)) return value;
     if (!value.includes('.') && !Number.isSafeInteger(num)) return value;
