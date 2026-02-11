@@ -117,6 +117,9 @@ export function getConfig() {
   return configCache;
 }
 
+/** @type {string[]} Keys that could cause prototype pollution if used in paths */
+const DANGEROUS_KEYS = ['__proto__', 'constructor', 'prototype'];
+
 /**
  * Set a config value using dot notation (e.g., "ai.model" or "welcome.enabled")
  * Persists to database and updates in-memory cache
@@ -128,6 +131,13 @@ export async function setConfigValue(path, value) {
   const parts = path.split('.');
   if (parts.length < 2) {
     throw new Error('Path must include section and key (e.g., "ai.model")');
+  }
+
+  // Validate path segments to prevent prototype pollution
+  for (const part of parts) {
+    if (DANGEROUS_KEYS.includes(part)) {
+      throw new Error(`Invalid path: '${part}' is a reserved key`);
+    }
   }
 
   const section = parts[0];
