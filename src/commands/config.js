@@ -191,12 +191,19 @@ async function handleSet(interaction) {
 
     const updatedSection = await setConfigValue(path, value);
 
+    // Traverse the full remaining path to get the actual set value
+    const pathParts = path.split('.').slice(1);
+    let displayValue = updatedSection;
+    for (const part of pathParts) {
+      displayValue = displayValue?.[part];
+    }
+
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
       .setTitle('✅ Config Updated')
       .addFields(
         { name: 'Path', value: `\`${path}\``, inline: true },
-        { name: 'New Value', value: `\`${JSON.stringify(updatedSection[path.split('.').slice(1)[0]], null, 2) ?? value}\``, inline: true }
+        { name: 'New Value', value: `\`${JSON.stringify(displayValue, null, 2) ?? value}\``, inline: true }
       )
       .setFooter({ text: 'Changes take effect immediately' })
       .setTimestamp();

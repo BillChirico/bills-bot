@@ -17,18 +17,30 @@ let configCache = {};
 
 /**
  * Load config.json from disk (used as seed/fallback)
+ * @param {boolean} [exitOnError=true] - Whether to call process.exit on error (for startup) or throw (for runtime)
  * @returns {Object} Configuration object from file
  */
-export function loadConfigFromFile() {
+export function loadConfigFromFile(exitOnError = true) {
   try {
     if (!existsSync(configPath)) {
-      console.error('❌ config.json not found!');
-      process.exit(1);
+      const msg = 'config.json not found!';
+      if (exitOnError) {
+        console.error(`❌ ${msg}`);
+        process.exit(1);
+      }
+      throw new Error(msg);
     }
     return JSON.parse(readFileSync(configPath, 'utf-8'));
   } catch (err) {
-    console.error('❌ Failed to load config.json:', err.message);
-    process.exit(1);
+    if (err.message === 'config.json not found!') {
+      throw err;
+    }
+    const msg = `Failed to load config.json: ${err.message}`;
+    if (exitOnError) {
+      console.error(`❌ ${msg}`);
+      process.exit(1);
+    }
+    throw new Error(msg);
   }
 }
 
@@ -55,16 +67,26 @@ export async function loadConfig() {
     const { rows } = await pool.query('SELECT key, value FROM config');
 
     if (rows.length === 0) {
-      // Seed database from config.json
+      // Seed database from config.json using a transaction for atomicity
       info('No config in database, seeding from config.json');
-      for (const [key, value] of Object.entries(fileConfig)) {
-        await pool.query(
-          'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
-          [key, JSON.stringify(value)]
-        );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const [key, value] of Object.entries(fileConfig)) {
+          await client.query(
+            'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
+            [key, JSON.stringify(value)]
+          );
+        }
+        await client.query('COMMIT');
+        info('Config seeded to database');
+        configCache = { ...fileConfig };
+      } catch (seedErr) {
+        await client.query('ROLLBACK');
+        throw seedErr;
+      } finally {
+        client.release();
       }
-      info('Config seeded to database');
-      configCache = { ...fileConfig };
     } else {
       // Load from database
       configCache = {};
@@ -90,15 +112,6 @@ export function getConfig() {
 }
 
 /**
- * Get a specific config section
- * @param {string} section - Top-level config section name
- * @returns {Object|undefined} Section config or undefined
- */
-export function getConfigSection(section) {
-  return configCache[section];
-}
-
-/**
  * Set a config value using dot notation (e.g., "ai.model" or "welcome.enabled")
  * Persists to database and updates in-memory cache
  * @param {string} path - Dot-notation path (e.g., "ai.model")
@@ -112,15 +125,12 @@ export async function setConfigValue(path, value) {
   }
 
   const section = parts[0];
-  const sectionConfig = { ...(configCache[section] || {}) };
 
-  // Ensure section exists in cache
-  if (!configCache[section]) {
-    configCache[section] = {};
-  }
+  // Create a deep copy of the section to modify (preserves cache on DB failure)
+  const newSectionConfig = structuredClone(configCache[section] || {});
 
-  // Navigate to the nested key and set the value (mutate in-place for reference propagation)
-  let current = configCache[section];
+  // Navigate to the nested key and set the value on the copy
+  let current = newSectionConfig;
   for (let i = 1; i < parts.length - 1; i++) {
     if (current[parts[i]] === undefined || typeof current[parts[i]] !== 'object') {
       current[parts[i]] = {};
@@ -129,16 +139,20 @@ export async function setConfigValue(path, value) {
   }
 
   const finalKey = parts[parts.length - 1];
-  current[finalKey] = parseValue(value);
+  const parsedValue = parseValue(value);
+  current[finalKey] = parsedValue;
 
-  // Update database
+  // Write to database FIRST (before mutating cache)
   const pool = getPool();
   await pool.query(
     'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
-    [section, JSON.stringify(configCache[section])]
+    [section, JSON.stringify(newSectionConfig)]
   );
 
-  info('Config updated', { path, value: current[finalKey] });
+  // Only update in-memory cache after successful DB write
+  configCache[section] = newSectionConfig;
+
+  info('Config updated', { path, value: parsedValue });
   return configCache[section];
 }
 
@@ -148,7 +162,8 @@ export async function setConfigValue(path, value) {
  * @returns {Promise<Object>} Reset config
  */
 export async function resetConfig(section) {
-  const fileConfig = loadConfigFromFile();
+  // Use exitOnError=false since this is called at runtime (not startup)
+  const fileConfig = loadConfigFromFile(false);
   const pool = getPool();
 
   if (section) {
