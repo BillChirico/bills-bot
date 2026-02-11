@@ -214,7 +214,7 @@ function buildVibeLine(snapshot, suggestedChannels) {
 
   switch (snapshot.level) {
     case 'hype':
-      return `The place is buzzing right now — big energy in ${channelText}.`;
+      return `The place is buzzing right now - big energy in ${channelText}.`;
     case 'busy':
       return `Good timing: chat is active (${snapshot.messageCount} messages recently), especially in ${channelText}.`;
     case 'steady':
@@ -225,7 +225,7 @@ function buildVibeLine(snapshot, suggestedChannels) {
       }
       return `It's a chill moment, but ${channelText} is where people are checking in.`;
     default:
-      return `You're catching us in a quiet window — perfect time to introduce yourself before the chaos starts.`;
+      return `You're catching us in a quiet window - perfect time to introduce yourself before the chaos starts.`;
   }
 }
 
@@ -247,7 +247,7 @@ function buildCtaLine(channels) {
     return `Say hey in ${first} and let us know what you're building.`;
   }
 
-  return 'Say hey and tell us what you’re building — we’re glad you’re here.';
+  return "Say hey and tell us what you're building — we're glad you're here.";
 }
 
 /**
@@ -263,7 +263,7 @@ function getMilestoneLine(memberCount, settings) {
   const notableMilestones = new Set([10, 25, 50, 100, 250, 500, 1000]);
 
   if (notableMilestones.has(memberCount) || (interval > 0 && memberCount % interval === 0)) {
-    return `🎉 Perfect timing — you’re our **#${memberCount}** member milestone!`;
+    return `🎉 Perfect timing - you're our **#${memberCount}** member milestone!`;
   }
 
   return null;
@@ -312,22 +312,22 @@ function getGreetingTemplates(timeOfDay) {
   const templates = {
     morning: [
       (ctx) => `☀️ Morning and welcome to **${ctx.server}**, <@${ctx.id}>!`,
-      (ctx) => `Hey <@${ctx.id}> — great way to start the day. Welcome to **${ctx.server}**!`,
+      (ctx) => `Hey <@${ctx.id}> - great way to start the day. Welcome to **${ctx.server}**!`,
       (ctx) => `Good morning <@${ctx.id}> 👋 You just joined **${ctx.server}**.`,
     ],
     afternoon: [
       (ctx) => `👋 Welcome to **${ctx.server}**, <@${ctx.id}>!`,
-      (ctx) => `Nice timing, <@${ctx.id}> — welcome to the Volvox corner of the internet.`,
+      (ctx) => `Nice timing, <@${ctx.id}> - welcome to the Volvox corner of the internet.`,
       (ctx) => `Hey <@${ctx.id}>! Glad you made it into **${ctx.server}**.`,
     ],
     evening: [
-      (ctx) => `🌆 Evening crew just got better — welcome, <@${ctx.id}>!`,
+      (ctx) => `🌆 Evening crew just got better - welcome, <@${ctx.id}>!`,
       (ctx) => `Welcome to **${ctx.server}**, <@${ctx.id}>. Prime build-hours energy right now.`,
       (ctx) => `Hey <@${ctx.id}> 👋 Great time to join the party at **${ctx.server}**.`,
     ],
     night: [
       (ctx) => `🌙 Night owl spotted. Welcome to **${ctx.server}**, <@${ctx.id}>!`,
-      (ctx) => `Late-night builders are active — welcome in, <@${ctx.id}>.`,
+      (ctx) => `Late-night builders are active - welcome in, <@${ctx.id}>.`,
       (ctx) => `Welcome <@${ctx.id}>! The night shift at **${ctx.server}** is undefeated.`,
     ],
   };
