@@ -4,7 +4,6 @@
  */
 
 import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
-import { warn as logWarn } from '../logger.js';
 import { getConfig, resetConfig, setConfigValue } from '../modules/config.js';
 
 /**
@@ -211,7 +210,10 @@ async function handleView(interaction) {
       const sectionJson = JSON.stringify(sectionData, null, 2);
       embed.addFields({
         name: 'Settings',
-        value: `\`\`\`json\n${sectionJson.length > 1000 ? `${sectionJson.slice(0, 997)}...` : sectionJson}\n\`\`\``,
+        value:
+          '```json\n' +
+          (sectionJson.length > 1000 ? `${sectionJson.slice(0, 997)}...` : sectionJson) +
+          '\n```',
       });
     } else {
       embed.setDescription('Current bot configuration');
@@ -254,8 +256,10 @@ async function handleView(interaction) {
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
   } catch (err) {
+    const safeMessage =
+      process.env.NODE_ENV === 'production' ? 'An internal error occurred.' : err.message;
     await interaction.reply({
-      content: `❌ Failed to load config: ${err.message}`,
+      content: `❌ Failed to load config: ${safeMessage}`,
       ephemeral: true,
     });
   }
@@ -282,31 +286,13 @@ async function handleSet(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
 
-    // Contract: setConfigValue(path, value) returns the updated section object
-    // for the first path segment (e.g. path "ai.model" returns config.ai).
     const updatedSection = await setConfigValue(path, value);
 
-    const parts = path.split('.');
-
-    // Traverse to the actual leaf value for display from the section-shaped return value
-    let leafValue = parts.slice(1).reduce((obj, k) => obj?.[k], updatedSection);
-
-    // Defensive fallback if the contract ever changes and the full root object is returned
-    if (leafValue === undefined) {
-      leafValue = parts.reduce((obj, k) => obj?.[k], updatedSection);
-
-      if (leafValue === undefined) {
-        logWarn('Unexpected setConfigValue return shape in /config set', {
-          path,
-          expectedShape: 'section',
-          returnedType: Array.isArray(updatedSection) ? 'array' : typeof updatedSection,
-          returnedKeys:
-            updatedSection && typeof updatedSection === 'object'
-              ? Object.keys(updatedSection).slice(0, 10)
-              : null,
-        });
-      }
-    }
+    // Traverse to the actual leaf value for display
+    const leafValue = path
+      .split('.')
+      .slice(1)
+      .reduce((obj, k) => obj?.[k], updatedSection);
 
     const displayValue = JSON.stringify(leafValue, null, 2) ?? value;
     const truncatedValue =
@@ -316,15 +302,17 @@ async function handleSet(interaction) {
       .setColor(0x57f287)
       .setTitle('✅ Config Updated')
       .addFields(
-        { name: 'Path', value: `\`${path}\``, inline: true },
-        { name: 'New Value', value: `\`${truncatedValue}\``, inline: true },
+        { name: 'Path', value: `\`${escapeInlineCode(path)}\``, inline: true },
+        { name: 'New Value', value: `\`${escapeInlineCode(truncatedValue)}\``, inline: true },
       )
       .setFooter({ text: 'Changes take effect immediately' })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    const content = `❌ Failed to set config: ${err.message}`;
+    const safeMessage =
+      process.env.NODE_ENV === 'production' ? 'An internal error occurred.' : err.message;
+    const content = `❌ Failed to set config: ${safeMessage}`;
     if (interaction.deferred) {
       await interaction.editReply({ content });
     } else {
@@ -349,7 +337,7 @@ async function handleReset(interaction) {
       .setTitle('🔄 Config Reset')
       .setDescription(
         section
-          ? `Section **${section}** has been reset to defaults from config.json.`
+          ? `Section **${escapeInlineCode(section)}** has been reset to defaults from config.json.`
           : 'All configuration has been reset to defaults from config.json.',
       )
       .setFooter({ text: 'Changes take effect immediately' })
@@ -357,7 +345,9 @@ async function handleReset(interaction) {
 
     await interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    const content = `❌ Failed to reset config: ${err.message}`;
+    const safeMessage =
+      process.env.NODE_ENV === 'production' ? 'An internal error occurred.' : err.message;
+    const content = `❌ Failed to reset config: ${safeMessage}`;
     if (interaction.deferred) {
       await interaction.editReply({ content });
     } else {

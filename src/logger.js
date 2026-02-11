@@ -50,6 +50,7 @@ if (fileOutputEnabled) {
  */
 const SENSITIVE_FIELDS = [
   'DISCORD_TOKEN',
+  'OPENCLAW_API_KEY',
   'OPENCLAW_TOKEN',
   'token',
   'password',
@@ -144,7 +145,7 @@ const consoleFormat = winston.format.printf(
     const prefix = EMOJI_MAP[originalLevel] || '📝';
     const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
 
-    return `${prefix} [${timestamp}] ${level.toUpperCase()}: ${message}${metaStr}`;
+    return `${prefix} [${timestamp}] ${originalLevel.toUpperCase()}: ${message}${metaStr}`;
   },
 );
 

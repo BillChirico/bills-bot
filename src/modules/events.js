@@ -3,6 +3,7 @@
  * Handles Discord event listeners and handlers
  */
 
+import { Client, Events } from 'discord.js';
 import { info, error as logError, warn } from '../logger.js';
 import { needsSplitting, splitMessage } from '../utils/splitMessage.js';
 import { generateResponse } from './ai.js';
@@ -10,15 +11,18 @@ import { accumulate, resetCounter } from './chimeIn.js';
 import { isSpam, sendSpamAlert } from './spam.js';
 import { recordCommunityActivity, sendWelcomeMessage } from './welcome.js';
 
+/** @type {boolean} Guard against duplicate process-level handler registration */
+let processHandlersRegistered = false;
+
 /**
  * Register bot ready event handler
- * @param {Object} client - Discord client
+ * @param {Client} client - Discord client
  * @param {Object} config - Bot configuration
  * @param {Object} healthMonitor - Health monitor instance
  */
 export function registerReadyHandler(client, config, healthMonitor) {
-  client.once('clientReady', () => {
-    info(`${client.user.tag} is online, serving ${client.guilds.cache.size} server(s)`);
+  client.once(Events.ClientReady, () => {
+    info(`${client.user.tag} is online`, { servers: client.guilds.cache.size });
 
     // Record bot start time
     if (healthMonitor) {
@@ -39,30 +43,30 @@ export function registerReadyHandler(client, config, healthMonitor) {
 
 /**
  * Register guild member add event handler
- * @param {Object} client - Discord client
+ * @param {Client} client - Discord client
  * @param {Object} config - Bot configuration
  */
 export function registerGuildMemberAddHandler(client, config) {
-  client.on('guildMemberAdd', async (member) => {
+  client.on(Events.GuildMemberAdd, async (member) => {
     await sendWelcomeMessage(member, client, config);
   });
 }
 
 /**
  * Register message create event handler
- * @param {Object} client - Discord client
+ * @param {Client} client - Discord client
  * @param {Object} config - Bot configuration
  * @param {Object} healthMonitor - Health monitor instance
  */
 export function registerMessageCreateHandler(client, config, healthMonitor) {
-  client.on('messageCreate', async (message) => {
+  client.on(Events.MessageCreate, async (message) => {
     // Ignore bots and DMs
     if (message.author.bot) return;
     if (!message.guild) return;
 
     // Spam detection
     if (config.moderation?.enabled && isSpam(message.content)) {
-      warn('Spam detected', { user: message.author.tag, preview: message.content.slice(0, 50) });
+      warn('Spam detected', { userId: message.author.id, contentPreview: '[redacted]' });
       await sendSpamAlert(message, client, config);
       return;
     }
@@ -120,23 +124,26 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
 
     // Chime-in: accumulate message for organic participation (fire-and-forget)
     accumulate(message, config).catch((err) => {
-      logError('ChimeIn accumulate error', { error: err.message });
+      logError('ChimeIn accumulate error', { error: err?.message });
     });
   });
 }
 
 /**
  * Register error event handlers
- * @param {Object} client - Discord client
+ * @param {Client} client - Discord client
  */
 export function registerErrorHandlers(client) {
-  client.on('error', (err) => {
+  client.on(Events.Error, (err) => {
     logError('Discord error', { error: err.message, stack: err.stack });
   });
 
-  process.on('unhandledRejection', (err) => {
-    logError('Unhandled rejection', { error: err?.message || String(err), stack: err?.stack });
-  });
+  if (!processHandlersRegistered) {
+    process.on('unhandledRejection', (err) => {
+      logError('Unhandled rejection', { error: err?.message || String(err), stack: err?.stack });
+    });
+    processHandlersRegistered = true;
+  }
 }
 
 /**

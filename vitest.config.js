@@ -5,9 +5,11 @@ export default defineConfig({
     globals: false,
     environment: 'node',
     include: ['tests/**/*.test.js'],
+    testTimeout: 10000,
     coverage: {
       provider: 'v8',
-      include: ['src/db.js', 'src/modules/ai.js'],
+      include: ['src/**/*.js'],
+      exclude: ['src/deploy-commands.js'],
       thresholds: {
         statements: 80,
         branches: 80,

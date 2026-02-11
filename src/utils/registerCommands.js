@@ -53,7 +53,7 @@ export async function registerCommands(commands, clientId, token, guildId = null
       scope: guildId ? 'guild' : 'global',
     });
   } catch (err) {
-    logError('Failed to register commands', { error: err.message });
+    logError('Failed to register commands', { error: err.message, stack: err.stack });
     throw err;
   }
 }

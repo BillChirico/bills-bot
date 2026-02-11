@@ -11,10 +11,10 @@
  * - Structured logging
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Client, Collection, GatewayIntentBits } from 'discord.js';
+import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
 import { config as dotenvConfig } from 'dotenv';
 import { closeDb, initDb } from './db.js';
 import { error, info, warn } from './logger.js';
@@ -29,6 +29,7 @@ import {
 import { loadConfig } from './modules/config.js';
 import { registerEventHandlers } from './modules/events.js';
 import { HealthMonitor } from './utils/health.js';
+import { loadCommandsFromDirectory } from './utils/loadCommands.js';
 import { getPermissionError, hasPermission } from './utils/permissions.js';
 import { registerCommands } from './utils/registerCommands.js';
 
@@ -132,28 +133,19 @@ function loadState() {
  */
 async function loadCommands() {
   const commandsPath = join(__dirname, 'commands');
-  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
 
-  for (const file of commandFiles) {
-    const filePath = join(commandsPath, file);
-    try {
-      const command = await import(filePath);
-      if (command.data && command.execute) {
-        client.commands.set(command.data.name, command);
-        info('Loaded command', { command: command.data.name });
-      } else {
-        warn('Command missing data or execute export', { file });
-      }
-    } catch (err) {
-      error('Failed to load command', { file, error: err.message });
-    }
-  }
+  await loadCommandsFromDirectory({
+    commandsPath,
+    onCommandLoaded: (command) => {
+      client.commands.set(command.data.name, command);
+    },
+  });
 }
 
 // Event handlers are registered after config loads (see startup below)
 
 // Extend ready handler to register slash commands
-client.once('clientReady', async () => {
+client.once(Events.ClientReady, async () => {
   // Register slash commands with Discord
   try {
     const commands = Array.from(client.commands.values());
@@ -277,6 +269,22 @@ async function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+// Error handling
+client.on('error', (err) => {
+  error('Discord client error', {
+    error: err.message,
+    stack: err.stack,
+    code: err.code,
+  });
+});
+
+process.on('unhandledRejection', (err) => {
+  error('Unhandled promise rejection', {
+    error: err?.message || String(err),
+    stack: err?.stack,
+    type: typeof err,
+  });
+});
 // Start bot
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
