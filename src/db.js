@@ -11,45 +11,75 @@ const { Pool } = pg;
 /** @type {pg.Pool | null} */
 let pool = null;
 
+/** @type {boolean} Re-entrancy guard for initDb */
+let initializing = false;
+
 /**
  * Initialize the database connection pool and create schema
  * @returns {Promise<pg.Pool>} The connection pool
  */
 export async function initDb() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('DATABASE_URL environment variable is not set');
+  if (pool) return pool;
+  if (initializing) {
+    throw new Error('initDb is already in progress');
   }
 
-  pool = new Pool({
-    connectionString,
-    max: 5,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-    // Railway internal connections don't need SSL
-    ssl: connectionString.includes('railway.internal') ? false : { rejectUnauthorized: false },
-  });
-
-  // Test connection
-  const client = await pool.connect();
+  initializing = true;
   try {
-    await client.query('SELECT NOW()');
-    info('Database connected');
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL environment variable is not set');
+    }
+
+    pool = new Pool({
+      connectionString,
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      // Railway internal connections don't need SSL; others default to verified TLS
+      ssl: connectionString.includes('railway.internal')
+        ? false
+        : process.env.DB_SSL_REJECT_UNAUTHORIZED === 'false'
+          ? { rejectUnauthorized: false }
+          : { rejectUnauthorized: true },
+    });
+
+    // Prevent unhandled pool errors from crashing the process
+    pool.on('error', (err) => {
+      logError('Unexpected database pool error', { error: err.message });
+    });
+
+    try {
+      // Test connection
+      const client = await pool.connect();
+      try {
+        await client.query('SELECT NOW()');
+        info('Database connected');
+      } finally {
+        client.release();
+      }
+
+      // Create schema
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS config (
+          key TEXT PRIMARY KEY,
+          value JSONB NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      info('Database schema initialized');
+    } catch (err) {
+      // Clean up the pool so getPool() doesn't return an unusable instance
+      await pool.end().catch(() => {});
+      pool = null;
+      throw err;
+    }
+
+    return pool;
   } finally {
-    client.release();
+    initializing = false;
   }
-
-  // Create schema
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS config (
-      key TEXT PRIMARY KEY,
-      value JSONB NOT NULL,
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-
-  info('Database schema initialized');
-  return pool;
 }
 
 /**
@@ -69,8 +99,13 @@ export function getPool() {
  */
 export async function closeDb() {
   if (pool) {
-    await pool.end();
-    pool = null;
-    info('Database pool closed');
+    try {
+      await pool.end();
+      info('Database pool closed');
+    } catch (err) {
+      logError('Error closing database pool', { error: err.message });
+    } finally {
+      pool = null;
+    }
   }
 }

@@ -18,17 +18,18 @@ let configCache = {};
 /**
  * Load config.json from disk (used as seed/fallback)
  * @returns {Object} Configuration object from file
+ * @throws {Error} If config.json is missing or unparseable
  */
 export function loadConfigFromFile() {
+  if (!existsSync(configPath)) {
+    const err = new Error('config.json not found!');
+    err.code = 'CONFIG_NOT_FOUND';
+    throw err;
+  }
   try {
-    if (!existsSync(configPath)) {
-      console.error('❌ config.json not found!');
-      process.exit(1);
-    }
     return JSON.parse(readFileSync(configPath, 'utf-8'));
   } catch (err) {
-    console.error('❌ Failed to load config.json:', err.message);
-    process.exit(1);
+    throw new Error(`Failed to load config.json: ${err.message}`);
   }
 }
 
@@ -38,14 +39,24 @@ export function loadConfigFromFile() {
  * @returns {Promise<Object>} Configuration object
  */
 export async function loadConfig() {
-  const fileConfig = loadConfigFromFile();
+  // Try loading config.json — DB may have valid config even if file is missing
+  let fileConfig;
+  try {
+    fileConfig = loadConfigFromFile();
+  } catch {
+    fileConfig = null;
+    info('config.json not available, will rely on database for configuration');
+  }
 
   try {
     let pool;
     try {
       pool = getPool();
     } catch {
-      // DB not initialized — use file config
+      // DB not initialized — file config is our only option
+      if (!fileConfig) {
+        throw new Error('No configuration source available: config.json is missing and database is not initialized');
+      }
       info('Database not available, using config.json');
       configCache = { ...fileConfig };
       return configCache;
@@ -55,16 +66,29 @@ export async function loadConfig() {
     const { rows } = await pool.query('SELECT key, value FROM config');
 
     if (rows.length === 0) {
-      // Seed database from config.json
-      info('No config in database, seeding from config.json');
-      for (const [key, value] of Object.entries(fileConfig)) {
-        await pool.query(
-          'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
-          [key, JSON.stringify(value)]
-        );
+      if (!fileConfig) {
+        throw new Error('No configuration source available: database is empty and config.json is missing');
       }
-      info('Config seeded to database');
-      configCache = { ...fileConfig };
+      // Seed database from config.json inside a transaction
+      info('No config in database, seeding from config.json');
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const [key, value] of Object.entries(fileConfig)) {
+          await client.query(
+            'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
+            [key, JSON.stringify(value)]
+          );
+        }
+        await client.query('COMMIT');
+        info('Config seeded to database');
+        configCache = { ...fileConfig };
+      } catch (txErr) {
+        await client.query('ROLLBACK');
+        throw txErr;
+      } finally {
+        client.release();
+      }
     } else {
       // Load from database
       configCache = {};
@@ -74,6 +98,10 @@ export async function loadConfig() {
       info('Config loaded from database');
     }
   } catch (err) {
+    if (!fileConfig) {
+      // No fallback available — re-throw
+      throw err;
+    }
     logError('Failed to load config from database, using config.json', { error: err.message });
     configCache = { ...fileConfig };
   }
@@ -90,15 +118,6 @@ export function getConfig() {
 }
 
 /**
- * Get a specific config section
- * @param {string} section - Top-level config section name
- * @returns {Object|undefined} Section config or undefined
- */
-export function getConfigSection(section) {
-  return configCache[section];
-}
-
-/**
  * Set a config value using dot notation (e.g., "ai.model" or "welcome.enabled")
  * Persists to database and updates in-memory cache
  * @param {string} path - Dot-notation path (e.g., "ai.model")
@@ -112,33 +131,85 @@ export async function setConfigValue(path, value) {
   }
 
   const section = parts[0];
-  const sectionConfig = { ...(configCache[section] || {}) };
+  const finalKey = parts[parts.length - 1];
+  const parsedVal = parseValue(value);
 
-  // Ensure section exists in cache
-  if (!configCache[section]) {
-    configCache[section] = {};
-  }
-
-  // Navigate to the nested key and set the value (mutate in-place for reference propagation)
-  let current = configCache[section];
+  // Deep clone the section for the INSERT case (new section that doesn't exist yet)
+  const sectionClone = structuredClone(configCache[section] || {});
+  let current = sectionClone;
   for (let i = 1; i < parts.length - 1; i++) {
     if (current[parts[i]] === undefined || typeof current[parts[i]] !== 'object') {
       current[parts[i]] = {};
     }
     current = current[parts[i]];
   }
+  current[finalKey] = parsedVal;
 
-  const finalKey = parts[parts.length - 1];
-  current[finalKey] = parseValue(value);
+  // Write to database first, then update cache.
+  // Uses a transaction with row lock to prevent concurrent writes from clobbering.
+  // Reads the current row, applies the change in JS (handles arbitrary nesting),
+  // then writes back — safe because the row is locked for the duration.
+  let dbPersisted = false;
+  try {
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Lock the row (or prepare for INSERT if missing)
+      const { rows } = await client.query(
+        'SELECT value FROM config WHERE key = $1 FOR UPDATE',
+        [section]
+      );
 
-  // Update database
-  const pool = getPool();
-  await pool.query(
-    'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
-    [section, JSON.stringify(configCache[section])]
-  );
+      if (rows.length > 0) {
+        // Row exists — merge change into the live DB value
+        const dbSection = rows[0].value;
+        let node = dbSection;
+        for (let i = 1; i < parts.length - 1; i++) {
+          if (node[parts[i]] === undefined || typeof node[parts[i]] !== 'object') {
+            node[parts[i]] = {};
+          }
+          node = node[parts[i]];
+        }
+        node[finalKey] = parsedVal;
 
-  info('Config updated', { path, value: current[finalKey] });
+        await client.query(
+          'UPDATE config SET value = $1, updated_at = NOW() WHERE key = $2',
+          [JSON.stringify(dbSection), section]
+        );
+      } else {
+        // New section — insert the full clone
+        await client.query(
+          'INSERT INTO config (key, value) VALUES ($1, $2)',
+          [section, JSON.stringify(sectionClone)]
+        );
+      }
+      await client.query('COMMIT');
+      dbPersisted = true;
+    } catch (txErr) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    logError('Database unavailable for config write — updating in-memory only', { error: err.message });
+  }
+
+  // Update in-memory cache (mutate in-place for reference propagation)
+  if (!configCache[section] || typeof configCache[section] !== 'object') {
+    configCache[section] = {};
+  }
+  let target = configCache[section];
+  for (let i = 1; i < parts.length - 1; i++) {
+    if (target[parts[i]] === undefined || typeof target[parts[i]] !== 'object') {
+      target[parts[i]] = {};
+    }
+    target = target[parts[i]];
+  }
+  target[finalKey] = parsedVal;
+
+  info('Config updated', { path, value: parsedVal, persisted: dbPersisted });
   return configCache[section];
 }
 
@@ -149,17 +220,25 @@ export async function setConfigValue(path, value) {
  */
 export async function resetConfig(section) {
   const fileConfig = loadConfigFromFile();
-  const pool = getPool();
+
+  let pool = null;
+  try {
+    pool = getPool();
+  } catch {
+    logError('Database unavailable for config reset — updating in-memory only');
+  }
 
   if (section) {
     if (!fileConfig[section]) {
       throw new Error(`Section '${section}' not found in config.json defaults`);
     }
 
-    await pool.query(
-      'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
-      [section, JSON.stringify(fileConfig[section])]
-    );
+    if (pool) {
+      await pool.query(
+        'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
+        [section, JSON.stringify(fileConfig[section])]
+      );
+    }
 
     // Mutate in-place so references stay valid
     const sectionData = configCache[section];
@@ -167,27 +246,54 @@ export async function resetConfig(section) {
       for (const key of Object.keys(sectionData)) delete sectionData[key];
       Object.assign(sectionData, fileConfig[section]);
     } else {
-      configCache[section] = { ...fileConfig[section] };
+      configCache[section] = isPlainObject(fileConfig[section])
+        ? { ...fileConfig[section] }
+        : fileConfig[section];
     }
     info('Config section reset', { section });
   } else {
-    // Reset all — mutate in-place
+    // Reset all inside a transaction
+    if (pool) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const [key, value] of Object.entries(fileConfig)) {
+          await client.query(
+            'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
+            [key, JSON.stringify(value)]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (txErr) {
+        await client.query('ROLLBACK');
+        throw txErr;
+      } finally {
+        client.release();
+      }
+    }
+
+    // Mutate in-place
     for (const [key, value] of Object.entries(fileConfig)) {
-      await pool.query(
-        'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
-        [key, JSON.stringify(value)]
-      );
-      if (configCache[key] && typeof configCache[key] === 'object') {
+      if (configCache[key] && isPlainObject(configCache[key]) && isPlainObject(value)) {
         for (const k of Object.keys(configCache[key])) delete configCache[key][k];
         Object.assign(configCache[key], value);
       } else {
-        configCache[key] = { ...value };
+        configCache[key] = isPlainObject(value) ? { ...value } : value;
       }
     }
     info('All config reset to defaults');
   }
 
   return configCache;
+}
+
+/**
+ * Check if a value is a plain object (not null, not array)
+ * @param {*} val - Value to check
+ * @returns {boolean} True if plain object
+ */
+function isPlainObject(val) {
+  return typeof val === 'object' && val !== null && !Array.isArray(val);
 }
 
 /**
@@ -205,8 +311,13 @@ function parseValue(value) {
   // Null
   if (value === 'null') return null;
 
-  // Numbers
-  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  // Numbers (keep as string if beyond safe integer range to avoid precision loss)
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return value;
+    if (!value.includes('.') && !Number.isSafeInteger(num)) return value;
+    return num;
+  }
 
   // JSON arrays/objects
   if ((value.startsWith('[') && value.endsWith(']')) || (value.startsWith('{') && value.endsWith('}'))) {

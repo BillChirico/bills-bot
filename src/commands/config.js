@@ -6,8 +6,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getConfig, setConfigValue, resetConfig } from '../modules/config.js';
 
-const VALID_SECTIONS = ['ai', 'chimeIn', 'welcome', 'moderation', 'logging', 'permissions'];
-
 export const data = new SlashCommandBuilder()
   .setName('config')
   .setDescription('View or manage bot configuration (Admin only)')
@@ -20,14 +18,7 @@ export const data = new SlashCommandBuilder()
           .setName('section')
           .setDescription('Specific config section to view')
           .setRequired(false)
-          .addChoices(
-            { name: 'AI Settings', value: 'ai' },
-            { name: 'Chime In', value: 'chimeIn' },
-            { name: 'Welcome Messages', value: 'welcome' },
-            { name: 'Moderation', value: 'moderation' },
-            { name: 'Logging', value: 'logging' },
-            { name: 'Permissions', value: 'permissions' }
-          )
+          .setAutocomplete(true)
       )
   )
   .addSubcommand(subcommand =>
@@ -57,38 +48,30 @@ export const data = new SlashCommandBuilder()
           .setName('section')
           .setDescription('Section to reset (omit to reset all)')
           .setRequired(false)
-          .addChoices(
-            { name: 'AI Settings', value: 'ai' },
-            { name: 'Chime In', value: 'chimeIn' },
-            { name: 'Welcome Messages', value: 'welcome' },
-            { name: 'Moderation', value: 'moderation' },
-            { name: 'Logging', value: 'logging' },
-            { name: 'Permissions', value: 'permissions' }
-          )
+          .setAutocomplete(true)
       )
   );
 
 export const adminOnly = true;
 
 /**
- * Recursively collect dot-notation paths for a config object.
- * Includes object paths, leaf paths, and nested array/object paths.
+ * Recursively collect leaf-only dot-notation paths for a config object.
+ * Only emits paths that point to non-object values (leaves).
  * @param {*} source - Config value to traverse
  * @param {string} [prefix] - Current path prefix
  * @param {string[]} [paths] - Accumulator array
- * @returns {string[]} Dot-notation config paths
+ * @returns {string[]} Dot-notation config paths (leaf-only)
  */
 function collectConfigPaths(source, prefix = '', paths = []) {
   if (Array.isArray(source)) {
     source.forEach((value, index) => {
       const path = prefix ? `${prefix}.${index}` : String(index);
-      paths.push(path);
-
       if (value && typeof value === 'object') {
         collectConfigPaths(value, path, paths);
+      } else {
+        paths.push(path);
       }
     });
-
     return paths;
   }
 
@@ -98,10 +81,10 @@ function collectConfigPaths(source, prefix = '', paths = []) {
 
   for (const [key, value] of Object.entries(source)) {
     const path = prefix ? `${prefix}.${key}` : key;
-    paths.push(path);
-
     if (value && typeof value === 'object') {
       collectConfigPaths(value, path, paths);
+    } else {
+      paths.push(path);
     }
   }
 
@@ -109,34 +92,41 @@ function collectConfigPaths(source, prefix = '', paths = []) {
 }
 
 /**
- * Handle autocomplete for config paths
+ * Handle autocomplete for config paths and section names
  * @param {Object} interaction - Discord interaction
  */
 export async function autocomplete(interaction) {
-  const focusedValue = interaction.options.getFocused().toLowerCase().trim();
+  const focusedOption = interaction.options.getFocused(true);
+  const focusedValue = focusedOption.value.toLowerCase().trim();
   const config = getConfig();
 
-  const paths = collectConfigPaths(config);
+  let choices;
+  if (focusedOption.name === 'section') {
+    // Autocomplete section names from live config
+    choices = Object.keys(config)
+      .filter(s => s.toLowerCase().includes(focusedValue))
+      .slice(0, 25)
+      .map(s => ({ name: s, value: s }));
+  } else {
+    // Autocomplete dot-notation paths (leaf-only)
+    const paths = collectConfigPaths(config);
+    choices = paths
+      .filter(p => p.toLowerCase().includes(focusedValue))
+      .sort((a, b) => {
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
+        const aStartsWithFocus = aLower.startsWith(focusedValue);
+        const bStartsWithFocus = bLower.startsWith(focusedValue);
+        if (aStartsWithFocus !== bStartsWithFocus) {
+          return aStartsWithFocus ? -1 : 1;
+        }
+        return aLower.localeCompare(bLower);
+      })
+      .slice(0, 25)
+      .map(p => ({ name: p, value: p }));
+  }
 
-  const filtered = paths
-    .filter(p => p.toLowerCase().includes(focusedValue))
-    .sort((a, b) => {
-      const aLower = a.toLowerCase();
-      const bLower = b.toLowerCase();
-      const aStartsWithFocus = aLower.startsWith(focusedValue);
-      const bStartsWithFocus = bLower.startsWith(focusedValue);
-
-      if (aStartsWithFocus !== bStartsWithFocus) {
-        return aStartsWithFocus ? -1 : 1;
-      }
-
-      return aLower.localeCompare(bLower);
-    })
-    .slice(0, 25);
-
-  await interaction.respond(
-    filtered.map(p => ({ name: p, value: p }))
-  );
+  await interaction.respond(choices);
 }
 
 /**
@@ -158,6 +148,9 @@ export async function execute(interaction) {
       break;
   }
 }
+
+/** @type {number} Discord embed total character limit */
+const EMBED_CHAR_LIMIT = 6000;
 
 /**
  * Handle /config view
@@ -183,24 +176,45 @@ async function handleView(interaction) {
       }
 
       embed.setDescription(`**${section.toUpperCase()} Configuration**`);
+      const sectionJson = JSON.stringify(sectionData, null, 2);
       embed.addFields({
         name: 'Settings',
-        value: '```json\n' + JSON.stringify(sectionData, null, 2) + '\n```'
+        value: '```json\n' + (sectionJson.length > 1000 ? sectionJson.slice(0, 997) + '...' : sectionJson) + '\n```'
       });
     } else {
       embed.setDescription('Current bot configuration');
 
+      // Track cumulative embed size to stay under Discord's 6000-char limit
+      let totalLength = embed.data.title.length + embed.data.description.length;
+      let truncated = false;
+
       for (const [key, value] of Object.entries(config)) {
         const jsonStr = JSON.stringify(value, null, 2);
-        const truncated = jsonStr.length > 1000
-          ? jsonStr.slice(0, 997) + '...'
-          : jsonStr;
+        const fieldValue = '```json\n' + (jsonStr.length > 1000 ? jsonStr.slice(0, 997) + '...' : jsonStr) + '\n```';
+        const fieldName = key.toUpperCase();
+        const fieldLength = fieldName.length + fieldValue.length;
 
+        if (totalLength + fieldLength > EMBED_CHAR_LIMIT - 200) {
+          // Reserve space for a truncation notice
+          embed.addFields({
+            name: '⚠️ Truncated',
+            value: 'Use `/config view section:<name>` to see remaining sections.',
+            inline: false
+          });
+          truncated = true;
+          break;
+        }
+
+        totalLength += fieldLength;
         embed.addFields({
-          name: `${key.toUpperCase()}`,
-          value: '```json\n' + truncated + '\n```',
+          name: fieldName,
+          value: fieldValue,
           inline: false
         });
+      }
+
+      if (truncated) {
+        embed.setFooter({ text: 'Some sections omitted • Use /config view section:<name> for details' });
       }
     }
 
@@ -220,11 +234,12 @@ async function handleSet(interaction) {
   const path = interaction.options.getString('path');
   const value = interaction.options.getString('value');
 
-  // Validate section exists
+  // Validate section exists in live config
   const section = path.split('.')[0];
-  if (!VALID_SECTIONS.includes(section)) {
+  const validSections = Object.keys(getConfig());
+  if (!validSections.includes(section)) {
     return await interaction.reply({
-      content: `❌ Invalid section '${section}'. Valid sections: ${VALID_SECTIONS.join(', ')}`,
+      content: `❌ Invalid section '${section}'. Valid sections: ${validSections.join(', ')}`,
       ephemeral: true
     });
   }
@@ -234,12 +249,15 @@ async function handleSet(interaction) {
 
     const updatedSection = await setConfigValue(path, value);
 
+    // Traverse to the actual leaf value for display
+    const leafValue = path.split('.').slice(1).reduce((obj, k) => obj?.[k], updatedSection);
+
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
       .setTitle('✅ Config Updated')
       .addFields(
         { name: 'Path', value: `\`${path}\``, inline: true },
-        { name: 'New Value', value: `\`${JSON.stringify(updatedSection[path.split('.').slice(1)[0]], null, 2) ?? value}\``, inline: true }
+        { name: 'New Value', value: `\`${JSON.stringify(leafValue, null, 2) ?? value}\``, inline: true }
       )
       .setFooter({ text: 'Changes take effect immediately' })
       .setTimestamp();

@@ -51,7 +51,7 @@ AI-powered Discord bot for the Volvox community.
 
 ## Config
 
-```json
+```jsonc
 {
   "ai": {
     "enabled": true,
