@@ -124,29 +124,22 @@ export async function setConfigValue(path, value) {
   }
 
   const section = parts[0];
+  const parsedValue = parseValue(value);
 
-  // Deep clone the section so we can write to DB first before mutating cache
-  const sectionClone = structuredClone(configCache[section] || {});
+  // Build the JSONB path for nested keys (everything after the section)
+  const jsonbPath = parts.slice(1);
 
-  // Navigate to the nested key in the clone and set the value
-  let current = sectionClone;
-  for (let i = 1; i < parts.length - 1; i++) {
-    if (current[parts[i]] === undefined || typeof current[parts[i]] !== 'object') {
-      current[parts[i]] = {};
-    }
-    current = current[parts[i]];
-  }
-
-  const finalKey = parts[parts.length - 1];
-  current[finalKey] = parseValue(value);
-
-  // Write to database first, then update cache on success
+  // Write to database using jsonb_set to atomically update only the specific key
+  // This prevents race conditions when concurrent calls modify different keys in the same section
   let dbPersisted = false;
   try {
     const pool = getPool();
+    // Use jsonb_set to update only the specific nested key path atomically
+    // First INSERT if section doesn't exist, then use jsonb_set for atomic update
     await pool.query(
-      'INSERT INTO config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()',
-      [section, JSON.stringify(sectionClone)]
+      `INSERT INTO config (key, value) VALUES ($1, jsonb_set('{}', $2::text[], $3::jsonb, true))
+       ON CONFLICT (key) DO UPDATE SET value = jsonb_set(config.value, $2::text[], $3::jsonb, true), updated_at = NOW()`,
+      [section, jsonbPath, JSON.stringify(parsedValue)]
     );
     dbPersisted = true;
   } catch (err) {
@@ -164,7 +157,8 @@ export async function setConfigValue(path, value) {
     }
     target = target[parts[i]];
   }
-  target[finalKey] = parseValue(value);
+  const finalKey = parts[parts.length - 1];
+  target[finalKey] = parsedValue;
 
   info('Config updated', { path, value: target[finalKey], persisted: dbPersisted });
   return configCache[section];
@@ -268,8 +262,15 @@ function parseValue(value) {
   // Null
   if (value === 'null') return null;
 
-  // Numbers
-  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  // Numbers (only convert if within safe integer range to preserve precision for large IDs like Discord snowflakes)
+  if (/^-?\d+(\.\d+)?$/.test(value)) {
+    const num = Number(value);
+    // Keep as string if it's an integer that exceeds safe integer range (e.g., Discord snowflake IDs)
+    if (!value.includes('.') && (num > Number.MAX_SAFE_INTEGER || num < Number.MIN_SAFE_INTEGER)) {
+      return value;
+    }
+    return num;
+  }
 
   // JSON arrays/objects
   if ((value.startsWith('[') && value.endsWith(']')) || (value.startsWith('{') && value.endsWith('}'))) {
