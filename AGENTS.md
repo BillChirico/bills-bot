@@ -109,9 +109,12 @@ client.on('eventName', (args) => yourHandler(args, config));
 
 - **Framework:** Vitest (`pnpm test`)
 - **Test directory:** `tests/`
+- **Coverage:** `pnpm test:coverage` — **mandatory 80% threshold** on statements, branches, functions, and lines
+- Coverage provider: `@vitest/coverage-v8`
 - Tests are smoke/unit tests — the bot requires Discord credentials so we don't test live connections
 - Test config structure, command exports, utility functions
 - Run `pnpm test` before every commit
+- **Any new code must include tests** — PRs that drop coverage below 80% will fail CI
 
 ## Documentation
 
