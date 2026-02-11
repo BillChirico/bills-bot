@@ -130,6 +130,9 @@ export async function setConfigValue(path, value) {
     throw new Error('Path must include section and key (e.g., "ai.model")');
   }
 
+  // Reject dangerous keys to prevent prototype pollution
+  validatePathSegments(parts);
+
   const section = parts[0];
   const finalKey = parts[parts.length - 1];
   const parsedVal = parseValue(value);
@@ -298,6 +301,22 @@ export async function resetConfig(section) {
   }
 
   return configCache;
+}
+
+/** Keys that must never be used as path segments (prototype pollution vectors) */
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Validate that no path segment is a prototype-pollution vector.
+ * @param {string[]} segments - Path segments to check
+ * @throws {Error} If any segment is a dangerous key
+ */
+function validatePathSegments(segments) {
+  for (const segment of segments) {
+    if (DANGEROUS_KEYS.has(segment)) {
+      throw new Error(`Invalid config path: '${segment}' is a reserved key and cannot be used`);
+    }
+  }
 }
 
 /**
