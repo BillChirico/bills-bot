@@ -6,6 +6,8 @@
 import { sendWelcomeMessage } from './welcome.js';
 import { isSpam, sendSpamAlert } from './spam.js';
 import { generateResponse } from './ai.js';
+import { accumulate, resetCounter } from './chimeIn.js';
+import { splitMessage, needsSplitting } from '../utils/splitMessage.js';
 
 /**
  * Register bot ready event handler
@@ -65,7 +67,7 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
       return;
     }
 
-    // AI chat - respond when mentioned
+    // AI chat - respond when mentioned (checked BEFORE accumulate to prevent double responses)
     if (config.ai?.enabled) {
       const isMentioned = message.mentions.has(client.user);
       const isReply = message.reference && message.mentions.repliedUser?.id === client.user.id;
@@ -75,6 +77,9 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
       const isAllowedChannel = allowedChannels.length === 0 || allowedChannels.includes(message.channel.id);
 
       if ((isMentioned || isReply) && isAllowedChannel) {
+        // Reset chime-in counter so we don't double-respond
+        resetCounter(message.channel.id);
+
         // Remove the mention from the message
         const cleanContent = message.content
           .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
@@ -96,16 +101,23 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
         );
 
         // Split long responses
-        if (response.length > 2000) {
-          const chunks = response.match(/[\s\S]{1,1990}/g) || [];
+        if (needsSplitting(response)) {
+          const chunks = splitMessage(response);
           for (const chunk of chunks) {
             await message.channel.send(chunk);
           }
         } else {
           await message.reply(response);
         }
+
+        return; // Don't accumulate direct mentions into chime-in buffer
       }
     }
+
+    // Chime-in: accumulate message for organic participation (fire-and-forget)
+    accumulate(message, config).catch((err) => {
+      console.error('ChimeIn accumulate error:', err.message);
+    });
   });
 }
 
