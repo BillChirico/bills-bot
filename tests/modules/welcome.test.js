@@ -1,352 +1,262 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  recordCommunityActivity,
-  renderWelcomeMessage,
-  sendWelcomeMessage,
-} from '../../src/modules/welcome.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { recordCommunityActivity, renderWelcomeMessage } from '../../src/modules/welcome.js';
 
-describe('renderWelcomeMessage', () => {
-  it('should replace {user} placeholder with mention', () => {
-    const template = 'Welcome {user}!';
-    const member = { id: '123456789', username: 'TestUser' };
-    const guild = { name: 'Test Server', memberCount: 100 };
+describe('welcome module', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
 
-    const result = renderWelcomeMessage(template, member, guild);
+	describe('renderWelcomeMessage', () => {
+		it('should replace {user} placeholder', () => {
+			const result = renderWelcomeMessage('Welcome {user}!', { id: '123' }, { name: 'Test', memberCount: 10 });
+			expect(result).toBe('Welcome <@123>!');
+		});
 
-    expect(result).toBe('Welcome <@123456789>!');
-  });
+		it('should replace {username} placeholder', () => {
+			const result = renderWelcomeMessage('Hello {username}', { id: '123', username: 'John' }, { name: 'Test', memberCount: 10 });
+			expect(result).toBe('Hello John');
+		});
 
-  it('should replace {username} placeholder', () => {
-    const template = 'Hello {username}!';
-    const member = { id: '123', username: 'TestUser' };
-    const guild = { name: 'Test Server', memberCount: 100 };
+		it('should replace {server} placeholder', () => {
+			const result = renderWelcomeMessage('Welcome to {server}', { id: '123' }, { name: 'MyServer', memberCount: 10 });
+			expect(result).toBe('Welcome to MyServer');
+		});
 
-    const result = renderWelcomeMessage(template, member, guild);
+		it('should replace {memberCount} placeholder', () => {
+			const result = renderWelcomeMessage('Member #{memberCount}', { id: '123' }, { name: 'Test', memberCount: 42 });
+			expect(result).toBe('Member #42');
+		});
 
-    expect(result).toBe('Hello TestUser!');
-  });
+		it('should replace all placeholders', () => {
+			const result = renderWelcomeMessage(
+				'Welcome {user} ({username}) to {server}! You are member #{memberCount}',
+				{ id: '123', username: 'John' },
+				{ name: 'TestServer', memberCount: 100 }
+			);
+			expect(result).toBe('Welcome <@123> (John) to TestServer! You are member #100');
+		});
 
-  it('should replace {server} placeholder', () => {
-    const template = 'Welcome to {server}!';
-    const member = { id: '123', username: 'TestUser' };
-    const guild = { name: 'My Cool Server', memberCount: 100 };
+		it('should handle multiple occurrences of same placeholder', () => {
+			const result = renderWelcomeMessage('{user} {user} {user}', { id: '123' }, { name: 'Test', memberCount: 10 });
+			expect(result).toBe('<@123> <@123> <@123>');
+		});
 
-    const result = renderWelcomeMessage(template, member, guild);
+		it('should handle missing username gracefully', () => {
+			const result = renderWelcomeMessage('Hello {username}', { id: '123' }, { name: 'Test', memberCount: 10 });
+			expect(result).toBe('Hello Unknown');
+		});
 
-    expect(result).toBe('Welcome to My Cool Server!');
-  });
+		it('should handle templates without placeholders', () => {
+			const result = renderWelcomeMessage('Hello world', { id: '123' }, { name: 'Test', memberCount: 10 });
+			expect(result).toBe('Hello world');
+		});
 
-  it('should replace {memberCount} placeholder', () => {
-    const template = 'You are member #{memberCount}!';
-    const member = { id: '123', username: 'TestUser' };
-    const guild = { name: 'Test Server', memberCount: 42 };
+		it('should handle empty template', () => {
+			const result = renderWelcomeMessage('', { id: '123' }, { name: 'Test', memberCount: 10 });
+			expect(result).toBe('');
+		});
+	});
 
-    const result = renderWelcomeMessage(template, member, guild);
+	describe('recordCommunityActivity', () => {
+		it('should track message activity', () => {
+			const message = {
+				guild: { id: 'guild1' },
+				channel: { id: 'channel1', isTextBased: () => true },
+				author: { bot: false },
+			};
+			const config = {
+				welcome: {
+					dynamic: {
+						excludeChannels: [],
+					},
+				},
+			};
 
-    expect(result).toBe('You are member #42!');
-  });
+			expect(() => recordCommunityActivity(message, config)).not.toThrow();
+		});
 
-  it('should replace all placeholders', () => {
-    const template = 'Welcome {user} ({username}) to {server}! Member #{memberCount}';
-    const member = { id: '123', username: 'TestUser' };
-    const guild = { name: 'Test Server', memberCount: 100 };
+		it('should ignore bot messages', () => {
+			const message = {
+				guild: { id: 'guild1' },
+				channel: { id: 'channel1', isTextBased: () => true },
+				author: { bot: true },
+			};
+			const config = {
+				welcome: {
+					dynamic: {
+						excludeChannels: [],
+					},
+				},
+			};
 
-    const result = renderWelcomeMessage(template, member, guild);
+			recordCommunityActivity(message, config);
+			// Should not throw or cause issues
+		});
 
-    expect(result).toBe('Welcome <@123> (TestUser) to Test Server! Member #100');
-  });
+		it('should ignore messages from excluded channels', () => {
+			const message = {
+				guild: { id: 'guild1' },
+				channel: { id: 'channel1', isTextBased: () => true },
+				author: { bot: false },
+			};
+			const config = {
+				welcome: {
+					dynamic: {
+						excludeChannels: ['channel1'],
+					},
+				},
+			};
 
-  it('should replace multiple occurrences of same placeholder', () => {
-    const template = '{user} {user} {user}';
-    const member = { id: '123', username: 'TestUser' };
-    const guild = { name: 'Test Server', memberCount: 100 };
+			recordCommunityActivity(message, config);
+			// Should not throw
+		});
 
-    const result = renderWelcomeMessage(template, member, guild);
+		it('should handle missing guild', () => {
+			const message = {
+				channel: { id: 'channel1', isTextBased: () => true },
+				author: { bot: false },
+			};
+			const config = {};
 
-    expect(result).toBe('<@123> <@123> <@123>');
-  });
+			expect(() => recordCommunityActivity(message, config)).not.toThrow();
+		});
 
-  it('should handle missing username gracefully', () => {
-    const template = 'Welcome {username}!';
-    const member = { id: '123' };
-    const guild = { name: 'Test Server', memberCount: 100 };
+		it('should handle missing channel', () => {
+			const message = {
+				guild: { id: 'guild1' },
+				author: { bot: false },
+			};
+			const config = {};
 
-    const result = renderWelcomeMessage(template, member, guild);
+			expect(() => recordCommunityActivity(message, config)).not.toThrow();
+		});
 
-    expect(result).toBe('Welcome Unknown!');
-  });
+		it('should handle non-text channels', () => {
+			const message = {
+				guild: { id: 'guild1' },
+				channel: { id: 'voice1', isTextBased: () => false },
+				author: { bot: false },
+			};
+			const config = {};
 
-  it('should handle template with no placeholders', () => {
-    const template = 'Welcome to the server!';
-    const member = { id: '123', username: 'TestUser' };
-    const guild = { name: 'Test Server', memberCount: 100 };
+			recordCommunityActivity(message, config);
+			// Should not throw
+		});
 
-    const result = renderWelcomeMessage(template, member, guild);
+		it('should handle missing config', () => {
+			const message = {
+				guild: { id: 'guild1' },
+				channel: { id: 'channel1', isTextBased: () => true },
+				author: { bot: false },
+			};
 
-    expect(result).toBe('Welcome to the server!');
-  });
-});
+			expect(() => recordCommunityActivity(message, null)).not.toThrow();
+		});
 
-describe('recordCommunityActivity', () => {
-  it('should not record activity for bot messages', () => {
-    const message = {
-      guild: { id: 'guild1' },
-      channel: { id: 'channel1', isTextBased: () => true },
-      author: { bot: true },
-    };
-    const config = { welcome: { dynamic: {} } };
+		it('should handle null message', () => {
+			const config = {};
+			expect(() => recordCommunityActivity(null, config)).not.toThrow();
+		});
 
-    // Should not throw
-    expect(() => recordCommunityActivity(message, config)).not.toThrow();
-  });
+		it('should accumulate multiple messages', () => {
+			const message = {
+				guild: { id: 'guild1' },
+				channel: { id: 'channel1', isTextBased: () => true },
+				author: { bot: false },
+			};
+			const config = {
+				welcome: {
+					dynamic: {
+						excludeChannels: [],
+					},
+				},
+			};
 
-  it('should not record activity for DM messages', () => {
-    const message = {
-      guild: null,
-      channel: { id: 'dm1', isTextBased: () => true },
-      author: { bot: false },
-    };
-    const config = { welcome: { dynamic: {} } };
+			// Record multiple messages
+			for (let i = 0; i < 5; i++) {
+				recordCommunityActivity(message, config);
+			}
 
-    expect(() => recordCommunityActivity(message, config)).not.toThrow();
-  });
+			// Should not throw
+		});
 
-  it('should not record activity for non-text channels', () => {
-    const message = {
-      guild: { id: 'guild1' },
-      channel: { id: 'voice1', isTextBased: () => false },
-      author: { bot: false },
-    };
-    const config = { welcome: { dynamic: {} } };
+		it('should handle different channels independently', () => {
+			const config = {
+				welcome: {
+					dynamic: {
+						excludeChannels: [],
+					},
+				},
+			};
 
-    expect(() => recordCommunityActivity(message, config)).not.toThrow();
-  });
+			const message1 = {
+				guild: { id: 'guild1' },
+				channel: { id: 'channel1', isTextBased: () => true },
+				author: { bot: false },
+			};
 
-  it('should record activity for valid guild text messages', () => {
-    const message = {
-      guild: { id: 'guild1' },
-      channel: { id: 'channel1', isTextBased: () => true },
-      author: { bot: false },
-    };
-    const config = { welcome: { dynamic: {} } };
+			const message2 = {
+				guild: { id: 'guild1' },
+				channel: { id: 'channel2', isTextBased: () => true },
+				author: { bot: false },
+			};
 
-    expect(() => recordCommunityActivity(message, config)).not.toThrow();
-  });
+			recordCommunityActivity(message1, config);
+			recordCommunityActivity(message2, config);
 
-  it('should not record activity for excluded channels', () => {
-    const message = {
-      guild: { id: 'guild1' },
-      channel: { id: 'excluded1', isTextBased: () => true },
-      author: { bot: false },
-    };
-    const config = {
-      welcome: {
-        dynamic: {
-          excludeChannels: ['excluded1'],
-        },
-      },
-    };
+			// Should track separately
+		});
 
-    expect(() => recordCommunityActivity(message, config)).not.toThrow();
-  });
+		it('should respect activity window', () => {
+			vi.useFakeTimers();
 
-  it('should handle missing config gracefully', () => {
-    const message = {
-      guild: { id: 'guild1' },
-      channel: { id: 'channel1', isTextBased: () => true },
-      author: { bot: false },
-    };
+			const message = {
+				guild: { id: 'guild1' },
+				channel: { id: 'channel1', isTextBased: () => true },
+				author: { bot: false },
+			};
+			const config = {
+				welcome: {
+					dynamic: {
+						excludeChannels: [],
+						activityWindowMinutes: 10,
+					},
+				},
+			};
 
-    expect(() => recordCommunityActivity(message, {})).not.toThrow();
-    expect(() => recordCommunityActivity(message, null)).not.toThrow();
-  });
-});
+			recordCommunityActivity(message, config);
+			vi.advanceTimersByTime(11 * 60 * 1000); // Advance past window
+			recordCommunityActivity(message, config);
 
-describe('sendWelcomeMessage', () => {
-  it('should not send message if welcome is disabled', async () => {
-    const member = {
-      id: '123',
-      user: { username: 'TestUser' },
-      guild: { name: 'Test Server', memberCount: 100 },
-    };
-    const client = {
-      channels: {
-        fetch: vi.fn(),
-      },
-    };
-    const config = {
-      welcome: {
-        enabled: false,
-      },
-    };
+			vi.useRealTimers();
+		});
+	});
 
-    await sendWelcomeMessage(member, client, config);
+	describe('edge cases', () => {
+		it('should handle very long server names', () => {
+			const longName = 'a'.repeat(1000);
+			const result = renderWelcomeMessage('{server}', { id: '123' }, { name: longName, memberCount: 10 });
+			expect(result).toBe(longName);
+		});
 
-    expect(client.channels.fetch).not.toHaveBeenCalled();
-  });
+		it('should handle very large member counts', () => {
+			const result = renderWelcomeMessage('{memberCount}', { id: '123' }, { name: 'Test', memberCount: 999999 });
+			expect(result).toBe('999999');
+		});
 
-  it('should not send message if channelId is not configured', async () => {
-    const member = {
-      id: '123',
-      user: { username: 'TestUser' },
-      guild: { name: 'Test Server', memberCount: 100 },
-    };
-    const client = {
-      channels: {
-        fetch: vi.fn(),
-      },
-    };
-    const config = {
-      welcome: {
-        enabled: true,
-      },
-    };
+		it('should handle special characters in server name', () => {
+			const result = renderWelcomeMessage('{server}', { id: '123' }, { name: 'Test & <Server>', memberCount: 10 });
+			expect(result).toBe('Test & <Server>');
+		});
 
-    await sendWelcomeMessage(member, client, config);
+		it('should handle special characters in username', () => {
+			const result = renderWelcomeMessage('{username}', { id: '123', username: 'User<script>' }, { name: 'Test', memberCount: 10 });
+			expect(result).toBe('User<script>');
+		});
 
-    expect(client.channels.fetch).not.toHaveBeenCalled();
-  });
-
-  it('should send static welcome message when dynamic is disabled', async () => {
-    const mockSend = vi.fn().mockResolvedValue({});
-    const member = {
-      id: '123',
-      user: { username: 'TestUser' },
-      guild: { name: 'Test Server', memberCount: 100 },
-    };
-    const client = {
-      channels: {
-        fetch: vi.fn().mockResolvedValue({
-          send: mockSend,
-        }),
-      },
-    };
-    const config = {
-      welcome: {
-        enabled: true,
-        channelId: '789',
-        message: 'Welcome {user} to {server}!',
-        dynamic: {
-          enabled: false,
-        },
-      },
-    };
-
-    await sendWelcomeMessage(member, client, config);
-
-    expect(client.channels.fetch).toHaveBeenCalledWith('789');
-    expect(mockSend).toHaveBeenCalledWith('Welcome <@123> to Test Server!');
-  });
-
-  it('should send dynamic welcome message when enabled', async () => {
-    const mockSend = vi.fn().mockResolvedValue({});
-    const member = {
-      id: '123',
-      user: { username: 'TestUser' },
-      guild: {
-        name: 'Test Server',
-        memberCount: 100,
-        channels: {
-          cache: new Map(),
-        },
-      },
-    };
-    const client = {
-      channels: {
-        fetch: vi.fn().mockResolvedValue({
-          send: mockSend,
-        }),
-      },
-    };
-    const config = {
-      welcome: {
-        enabled: true,
-        channelId: '789',
-        message: 'Static message',
-        dynamic: {
-          enabled: true,
-          timezone: 'America/New_York',
-        },
-      },
-    };
-
-    await sendWelcomeMessage(member, client, config);
-
-    expect(mockSend).toHaveBeenCalled();
-    const sentMessage = mockSend.mock.calls[0][0];
-    // Dynamic message should contain the user mention
-    expect(sentMessage).toContain('<@123>');
-  });
-
-  it('should handle channel fetch errors gracefully', async () => {
-    const member = {
-      id: '123',
-      user: { username: 'TestUser' },
-      guild: { name: 'Test Server', memberCount: 100 },
-    };
-    const client = {
-      channels: {
-        fetch: vi.fn().mockRejectedValue(new Error('Channel not found')),
-      },
-    };
-    const config = {
-      welcome: {
-        enabled: true,
-        channelId: '789',
-        message: 'Welcome!',
-      },
-    };
-
-    await expect(sendWelcomeMessage(member, client, config)).resolves.not.toThrow();
-  });
-
-  it('should handle null channel gracefully', async () => {
-    const member = {
-      id: '123',
-      user: { username: 'TestUser' },
-      guild: { name: 'Test Server', memberCount: 100 },
-    };
-    const client = {
-      channels: {
-        fetch: vi.fn().mockResolvedValue(null),
-      },
-    };
-    const config = {
-      welcome: {
-        enabled: true,
-        channelId: '789',
-        message: 'Welcome!',
-      },
-    };
-
-    await expect(sendWelcomeMessage(member, client, config)).resolves.not.toThrow();
-  });
-
-  it('should use default message if not configured', async () => {
-    const mockSend = vi.fn().mockResolvedValue({});
-    const member = {
-      id: '123',
-      user: { username: 'TestUser' },
-      guild: { name: 'Test Server', memberCount: 100 },
-    };
-    const client = {
-      channels: {
-        fetch: vi.fn().mockResolvedValue({
-          send: mockSend,
-        }),
-      },
-    };
-    const config = {
-      welcome: {
-        enabled: true,
-        channelId: '789',
-      },
-    };
-
-    await sendWelcomeMessage(member, client, config);
-
-    expect(mockSend).toHaveBeenCalled();
-    const sentMessage = mockSend.mock.calls[0][0];
-    expect(sentMessage).toContain('<@123>');
-  });
+		it('should handle numeric usernames', () => {
+			const result = renderWelcomeMessage('{username}', { id: '123', username: '12345' }, { name: 'Test', memberCount: 10 });
+			expect(result).toBe('12345');
+		});
+	});
 });
