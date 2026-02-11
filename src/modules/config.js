@@ -209,7 +209,15 @@ export async function setConfigValue(path, value) {
  * @returns {Promise<Object>} Reset config
  */
 export async function resetConfig(section) {
-  const fileConfig = loadConfigFromFile();
+  let fileConfig;
+  try {
+    fileConfig = loadConfigFromFile();
+  } catch {
+    throw new Error(
+      'Cannot reset configuration: config.json is not available. ' +
+      'Reset requires the default config file as a baseline.'
+    );
+  }
 
   let pool = null;
   try {
