@@ -207,6 +207,11 @@ function buildVibeLine(snapshot, suggestedChannels) {
   const topChannels = snapshot.topChannelIds.map(id => `<#${id}>`);
   const channelText = (topChannels.length ? topChannels : suggestedChannels).slice(0, 2).join(' + ');
 
+  // Fall back to quiet message if no channel text is available
+  if (!channelText) {
+    return `You're catching us in a quiet window — perfect time to introduce yourself before the chaos starts.`;
+  }
+
   switch (snapshot.level) {
     case 'hype':
       return `The place is buzzing right now — big energy in ${channelText}.`;
