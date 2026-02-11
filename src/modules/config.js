@@ -15,7 +15,7 @@ const configPath = join(__dirname, '..', '..', 'config.json');
 /** @type {Object} In-memory config cache */
 let configCache = {};
 
-/** @type {Object|null} Cached config.json contents (invalidated on reset) */
+/** @type {Object|null} Cached config.json contents (loaded once, never invalidated) */
 let fileConfigCache = null;
 
 /**
