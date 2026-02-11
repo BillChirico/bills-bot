@@ -272,18 +272,21 @@ export async function initConversationHistory() {
 
   try {
     const limit = getHistoryLength();
+    const ttlDays = getHistoryTTLDays();
 
     // Single query: fetch the last N messages per channel using ROW_NUMBER()
+    // Filter by TTL in the subquery to avoid scanning expired rows that cleanup will delete
     const { rows } = await pool.query(
       `SELECT channel_id, role, content
        FROM (
          SELECT channel_id, role, content, created_at,
                 ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC) AS rn
          FROM conversations
+         WHERE created_at >= NOW() - INTERVAL '1 day' * $2
        ) sub
        WHERE rn <= $1
        ORDER BY channel_id, created_at ASC`,
-      [limit],
+      [limit, ttlDays],
     );
 
     // Group rows by channel_id
