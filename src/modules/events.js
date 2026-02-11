@@ -3,7 +3,7 @@
  * Handles Discord event listeners and handlers
  */
 
-import { Events } from 'discord.js';
+import { Client, Events } from 'discord.js';
 import { info, error as logError, warn } from '../logger.js';
 import { needsSplitting, splitMessage } from '../utils/splitMessage.js';
 import { generateResponse } from './ai.js';
@@ -16,7 +16,7 @@ let processHandlersRegistered = false;
 
 /**
  * Register bot ready event handler
- * @param {Object} client - Discord client
+ * @param {Client} client - Discord client
  * @param {Object} config - Bot configuration
  * @param {Object} healthMonitor - Health monitor instance
  */
@@ -43,23 +43,23 @@ export function registerReadyHandler(client, config, healthMonitor) {
 
 /**
  * Register guild member add event handler
- * @param {Object} client - Discord client
+ * @param {Client} client - Discord client
  * @param {Object} config - Bot configuration
  */
 export function registerGuildMemberAddHandler(client, config) {
-  client.on('guildMemberAdd', async (member) => {
+  client.on(Events.GuildMemberAdd, async (member) => {
     await sendWelcomeMessage(member, client, config);
   });
 }
 
 /**
  * Register message create event handler
- * @param {Object} client - Discord client
+ * @param {Client} client - Discord client
  * @param {Object} config - Bot configuration
  * @param {Object} healthMonitor - Health monitor instance
  */
 export function registerMessageCreateHandler(client, config, healthMonitor) {
-  client.on('messageCreate', async (message) => {
+  client.on(Events.MessageCreate, async (message) => {
     // Ignore bots and DMs
     if (message.author.bot) return;
     if (!message.guild) return;
@@ -131,16 +131,16 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
 
 /**
  * Register error event handlers
- * @param {Object} client - Discord client
+ * @param {Client} client - Discord client
  */
 export function registerErrorHandlers(client) {
-  client.on('error', (err) => {
+  client.on(Events.Error, (err) => {
     logError('Discord error', { error: err.message, stack: err.stack });
   });
 
   if (!processHandlersRegistered) {
     process.on('unhandledRejection', (err) => {
-      logError('Unhandled rejection', { error: err?.message, stack: err?.stack });
+      logError('Unhandled rejection', { error: err?.message || String(err), stack: err?.stack });
     });
     processHandlersRegistered = true;
   }

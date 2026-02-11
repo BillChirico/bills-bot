@@ -52,10 +52,10 @@ function getSslConfig(connectionString) {
  * @returns {Promise<pg.Pool>} The connection pool
  */
 export async function initDb() {
-  if (pool) return pool;
   if (initializing) {
     throw new Error('initDb is already in progress');
   }
+  if (pool) return pool;
 
   initializing = true;
   try {
@@ -94,6 +94,27 @@ export async function initDb() {
           value JSONB NOT NULL,
           updated_at TIMESTAMPTZ DEFAULT NOW()
         )
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS conversations (
+          id SERIAL PRIMARY KEY,
+          channel_id TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+          content TEXT NOT NULL,
+          username TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_conversations_channel_created
+        ON conversations (channel_id, created_at)
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_conversations_created_at
+        ON conversations (created_at)
       `);
 
       info('Database schema initialized');

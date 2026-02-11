@@ -10,13 +10,6 @@ const pgMocks = vi.hoisted(() => ({
   clientRelease: vi.fn(),
 }));
 
-vi.mock('../src/logger.js', () => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-}));
-
 vi.mock('pg', () => {
   class Pool {
     constructor(config) {
@@ -77,7 +70,7 @@ describe('db module', () => {
   afterEach(async () => {
     try {
       await dbModule.closeDb();
-    } catch {
+    } catch (err) {
       // ignore cleanup failures
     }
 
@@ -92,24 +85,57 @@ describe('db module', () => {
     } else {
       delete process.env.DATABASE_SSL;
     }
+
     vi.clearAllMocks();
   });
 
   describe('initDb', () => {
-    it('should initialize database pool', async () => {
+    it('should initialize database pool and create schema', async () => {
       const pool = await dbModule.initDb();
       expect(pool).toBeDefined();
+
       expect(pgMocks.poolConnect).toHaveBeenCalled();
       expect(pgMocks.clientQuery).toHaveBeenCalledWith('SELECT NOW()');
       expect(pgMocks.clientRelease).toHaveBeenCalled();
-      expect(pgMocks.poolQuery).toHaveBeenCalled();
+
+      // Should have created tables and indexes
+      const queries = pgMocks.poolQuery.mock.calls.map((c) => c[0]);
+      expect(queries.some((q) => q.includes('CREATE TABLE IF NOT EXISTS config'))).toBe(true);
+      expect(queries.some((q) => q.includes('CREATE TABLE IF NOT EXISTS conversations'))).toBe(
+        true,
+      );
+      expect(queries.some((q) => q.includes('idx_conversations_channel_created'))).toBe(true);
+      expect(queries.some((q) => q.includes('idx_conversations_created_at'))).toBe(true);
     });
 
     it('should return existing pool on second call', async () => {
       const pool1 = await dbModule.initDb();
       const pool2 = await dbModule.initDb();
+
       expect(pool1).toBe(pool2);
       expect(pgMocks.poolConnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reject concurrent initDb calls while initialization is in progress', async () => {
+      let resolveConnect;
+      const pendingConnect = new Promise((resolve) => {
+        resolveConnect = resolve;
+      });
+
+      pgMocks.poolConnect.mockImplementationOnce(() => pendingConnect);
+
+      const firstInit = dbModule.initDb();
+      const secondInit = dbModule.initDb();
+
+      await expect(secondInit).rejects.toThrow('initDb is already in progress');
+
+      resolveConnect({
+        query: pgMocks.clientQuery,
+        release: pgMocks.clientRelease,
+      });
+
+      const pool = await firstInit;
+      expect(pool).toBeDefined();
     });
 
     it('should throw if DATABASE_URL is not set', async () => {
@@ -152,6 +178,7 @@ describe('db module', () => {
       await dbModule.initDb();
       pgMocks.poolEnd.mockRejectedValueOnce(new Error('close failed'));
       await dbModule.closeDb();
+      // Should log error but not throw
     });
   });
 

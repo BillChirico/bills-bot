@@ -28,6 +28,10 @@ const mocks = vi.hoisted(() => ({
   ai: {
     getConversationHistory: vi.fn(),
     setConversationHistory: vi.fn(),
+    setPool: vi.fn(),
+    initConversationHistory: vi.fn(),
+    startConversationCleanup: vi.fn(),
+    stopConversationCleanup: vi.fn(),
   },
 
   config: {
@@ -119,6 +123,10 @@ vi.mock('../src/logger.js', () => ({
 vi.mock('../src/modules/ai.js', () => ({
   getConversationHistory: mocks.ai.getConversationHistory,
   setConversationHistory: mocks.ai.setConversationHistory,
+  setPool: mocks.ai.setPool,
+  initConversationHistory: mocks.ai.initConversationHistory,
+  startConversationCleanup: mocks.ai.startConversationCleanup,
+  stopConversationCleanup: mocks.ai.stopConversationCleanup,
 }));
 
 vi.mock('../src/modules/config.js', () => ({
@@ -183,6 +191,10 @@ async function importIndex({
 
   mocks.ai.getConversationHistory.mockReset().mockReturnValue(new Map());
   mocks.ai.setConversationHistory.mockReset();
+  mocks.ai.setPool.mockReset();
+  mocks.ai.initConversationHistory.mockReset().mockResolvedValue(undefined);
+  mocks.ai.startConversationCleanup.mockReset();
+  mocks.ai.stopConversationCleanup.mockReset();
 
   mocks.config.loadConfig.mockReset().mockImplementation(() => {
     if (loadConfigReject) {

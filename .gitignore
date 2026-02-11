@@ -18,6 +18,9 @@ logs/security/
 data/*
 !data/.gitkeep
 
+# Test and coverage outputs
+coverage/
+
 # Verification scripts
 verify-*.js
 VERIFICATION_GUIDE.md

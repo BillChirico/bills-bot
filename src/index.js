@@ -18,7 +18,14 @@ import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
 import { config as dotenvConfig } from 'dotenv';
 import { closeDb, initDb } from './db.js';
 import { error, info, warn } from './logger.js';
-import { getConversationHistory, setConversationHistory } from './modules/ai.js';
+import {
+  getConversationHistory,
+  initConversationHistory,
+  setConversationHistory,
+  setPool,
+  startConversationCleanup,
+  stopConversationCleanup,
+} from './modules/ai.js';
 import { loadConfig } from './modules/config.js';
 import { registerEventHandlers } from './modules/events.js';
 import { HealthMonitor } from './utils/health.js';
@@ -234,11 +241,14 @@ async function gracefulShutdown(signal) {
     }
   }
 
-  // 2. Save state after pending requests complete
+  // 2. Stop conversation cleanup timer
+  stopConversationCleanup();
+
+  // 3. Save state after pending requests complete
   info('Saving conversation state');
   saveState();
 
-  // 3. Close database pool
+  // 4. Close database pool
   info('Closing database connection');
   try {
     await closeDb();
@@ -246,11 +256,11 @@ async function gracefulShutdown(signal) {
     error('Failed to close database pool', { error: err.message });
   }
 
-  // 4. Destroy Discord client
+  // 5. Destroy Discord client
   info('Disconnecting from Discord');
   client.destroy();
 
-  // 5. Log clean exit
+  // 6. Log clean exit
   info('Shutdown complete');
   process.exit(0);
 }
@@ -275,7 +285,6 @@ process.on('unhandledRejection', (err) => {
     type: typeof err,
   });
 });
-
 // Start bot
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -294,8 +303,9 @@ if (!token) {
  */
 async function startup() {
   // Initialize database
+  let dbPool = null;
   if (process.env.DATABASE_URL) {
-    await initDb();
+    dbPool = await initDb();
     info('Database initialized');
   } else {
     warn('DATABASE_URL not set — using config.json only (no persistence)');
@@ -305,8 +315,21 @@ async function startup() {
   config = await loadConfig();
   info('Configuration loaded', { sections: Object.keys(config) });
 
-  // Load previous conversation state
+  // Set up AI module's DB pool reference
+  if (dbPool) {
+    setPool(dbPool);
+  }
+
+  // TODO: loadState() is migration-only for file->DB persistence transition.
+  // When DB is available, initConversationHistory() effectively overwrites this state.
+  // Once all environments are DB-backed, remove this call and loadState/saveState helpers.
   loadState();
+
+  // Hydrate conversation history from DB (overwrites file state if DB is available)
+  await initConversationHistory();
+
+  // Start periodic conversation cleanup
+  startConversationCleanup();
 
   // Register event handlers with live config reference
   registerEventHandlers(client, config, healthMonitor);

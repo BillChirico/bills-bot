@@ -1,25 +1,19 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
-  "assist": {
-    "actions": {
-      "source": {
-        "organizeImports": "on"
-      }
-    }
+  "files": {
+    "includes": [
+      "src/**/*.js",
+      "tests/**/*.js",
+      "!node_modules/**",
+      "!coverage/**",
+      "!logs/**",
+      "!data/**"
+    ]
   },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
-      "correctness": {
-        "noUnusedVariables": "warn",
-        "noUnusedImports": "warn"
-      },
-      "style": {
-        "useConst": "error"
-      },
       "suspicious": {
-        "noVar": "error",
         "noConsole": "error"
       }
     }
@@ -28,8 +22,7 @@
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2,
-    "lineWidth": 100,
-    "lineEnding": "lf"
+    "lineWidth": 100
   },
   "javascript": {
     "formatter": {
@@ -37,8 +30,5 @@
       "trailingCommas": "all",
       "semicolons": "always"
     }
-  },
-  "files": {
-    "includes": ["**/*.js", "**/*.json", "**/*.md", "!coverage"]
   }
 }
