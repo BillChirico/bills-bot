@@ -309,7 +309,7 @@ function setNestedValue(root, pathParts, value) {
     if (DANGEROUS_KEYS.has(pathParts[i])) {
       throw new Error(`Invalid config path segment: '${pathParts[i]}' is a reserved key`);
     }
-    if (current[pathParts[i]] == null || typeof current[pathParts[i]] !== 'object') {
+    if (current[pathParts[i]] == null || typeof current[pathParts[i]] !== 'object' || Array.isArray(current[pathParts[i]])) {
       current[pathParts[i]] = {};
     }
     current = current[pathParts[i]];
