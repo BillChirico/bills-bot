@@ -88,7 +88,7 @@ export async function sendWelcomeMessage(member, client, config) {
       : renderWelcomeMessage(
           config.welcome.message || 'Welcome, {user}!',
           { id: member.id, username: member.user.username },
-          { name: member.guild.name, memberCount: member.guild.memberCount }
+          { name: member.guild.name, memberCount: member.guild.memberCount },
         );
 
     await channel.send(message);
@@ -154,7 +154,7 @@ function getCommunitySnapshot(guild, settings) {
   const channelCounts = [];
 
   for (const [channelId, timestamps] of activityMap.entries()) {
-    const recent = timestamps.filter(t => t >= cutoff);
+    const recent = timestamps.filter((t) => t >= cutoff);
 
     if (!recent.length) {
       activityMap.delete(channelId);
@@ -176,16 +176,16 @@ function getCommunitySnapshot(guild, settings) {
   const topChannelIds = channelCounts
     .sort((a, b) => b.count - a.count)
     .slice(0, 3)
-    .map(entry => entry.channelId);
+    .map((entry) => entry.channelId);
 
   const activeVoiceChannels = guild.channels.cache.filter(
-    channel => channel?.isVoiceBased?.() && channel.members?.size > 0
+    (channel) => channel?.isVoiceBased?.() && channel.members?.size > 0,
   );
 
   const voiceChannels = activeVoiceChannels.size;
   const voiceParticipants = [...activeVoiceChannels.values()].reduce(
     (sum, channel) => sum + (channel.members?.size || 0),
-    0
+    0,
   );
 
   const level = getActivityLevel(messageCount, voiceParticipants);
@@ -221,7 +221,7 @@ function getActivityLevel(messageCount, voiceParticipants) {
  * @returns {string}
  */
 function buildVibeLine(snapshot, suggestedChannels) {
-  const topChannels = snapshot.topChannelIds.map(id => `<#${id}>`);
+  const topChannels = snapshot.topChannelIds.map((id) => `<#${id}>`);
   const channelList = (topChannels.length ? topChannels : suggestedChannels).slice(0, 2);
   const channelText = channelList.join(' + ');
   const hasChannels = channelList.length > 0;
@@ -341,7 +341,8 @@ function getGreetingTemplates(timeOfDay) {
     ],
     afternoon: [
       (ctx) => `👋 Welcome to **${ctx.server}**, <@${ctx.id}>!`,
-      (ctx) => `Nice timing, <@${ctx.id}> - welcome to the **${ctx.server}** corner of the internet.`,
+      (ctx) =>
+        `Nice timing, <@${ctx.id}> - welcome to the **${ctx.server}** corner of the internet.`,
       (ctx) => `Hey <@${ctx.id}>! Glad you made it into **${ctx.server}**.`,
     ],
     evening: [
@@ -374,11 +375,10 @@ function getSuggestedChannels(member, config, snapshot) {
 
   const channelIds = [...new Set([...top, ...configured, ...legacy])]
     .filter(Boolean)
-    .filter(id => member.guild.channels.cache.has(id))
+    .filter((id) => member.guild.channels.cache.has(id))
     .slice(0, 3);
 
-  return channelIds
-    .map(id => `<#${id}>`);
+  return channelIds.map((id) => `<#${id}>`);
 }
 
 /**
@@ -388,7 +388,7 @@ function getSuggestedChannels(member, config, snapshot) {
  */
 function extractChannelIdsFromTemplate(template) {
   const matches = template.match(/<#(\d+)>/g) || [];
-  return matches.map(match => match.replace(/[^\d]/g, ''));
+  return matches.map((match) => match.replace(/[^\d]/g, ''));
 }
 
 /**

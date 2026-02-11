@@ -3,10 +3,10 @@
  * Tests that logger creates log files with proper JSON format
  */
 
-import { debug, info, warn, error } from './src/logger.js';
-import { existsSync, readFileSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { debug, error, info, warn } from './src/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const logsDir = join(__dirname, 'logs');
@@ -24,7 +24,7 @@ error('This is an error message for testing', { testId: 4, code: 'TEST_ERROR' })
 info('Testing sensitive data redaction', {
   DISCORD_TOKEN: 'this-should-be-redacted',
   username: 'safe-to-log',
-  password: 'this-should-also-be-redacted'
+  password: 'this-should-also-be-redacted',
 });
 
 console.log('✅ Test logs generated\n');
@@ -45,7 +45,7 @@ setTimeout(() => {
   console.log(`\n📁 Files in logs directory: ${logFiles.join(', ')}`);
 
   // Check 3: Combined log file exists
-  const combinedLog = logFiles.find(f => f.startsWith('combined-'));
+  const combinedLog = logFiles.find((f) => f.startsWith('combined-'));
   if (!combinedLog) {
     console.error('❌ FAIL: combined log file not found');
     process.exit(1);
@@ -53,7 +53,7 @@ setTimeout(() => {
   console.log(`✅ PASS: combined log file exists (${combinedLog})`);
 
   // Check 4: Error log file exists
-  const errorLog = logFiles.find(f => f.startsWith('error-'));
+  const errorLog = logFiles.find((f) => f.startsWith('error-'));
   if (!errorLog) {
     console.error('❌ FAIL: error log file not found');
     process.exit(1);
@@ -64,7 +64,10 @@ setTimeout(() => {
   console.log('\n📄 Verifying combined log format...');
   const combinedPath = join(logsDir, combinedLog);
   const combinedContent = readFileSync(combinedPath, 'utf-8');
-  const combinedLines = combinedContent.trim().split('\n').filter(line => line.trim());
+  const combinedLines = combinedContent
+    .trim()
+    .split('\n')
+    .filter((line) => line.trim());
 
   console.log(`\nCombined log entries: ${combinedLines.length}`);
 
@@ -115,14 +118,19 @@ setTimeout(() => {
 
   console.log(`\n✅ PASS: All ${validJsonCount} entries are valid JSON`);
   console.log(`✅ PASS: Timestamps present in all entries`);
-  console.log(`✅ PASS: Log levels present - info: ${hasInfoLevel}, warn: ${hasWarnLevel}, error: ${hasErrorLevel}`);
+  console.log(
+    `✅ PASS: Log levels present - info: ${hasInfoLevel}, warn: ${hasWarnLevel}, error: ${hasErrorLevel}`,
+  );
   console.log(`✅ PASS: Sensitive data redacted: ${sensitiveDataRedacted}`);
 
   // Check 6: Error log contains only error-level entries
   console.log('\n📄 Verifying error log format...');
   const errorPath = join(logsDir, errorLog);
   const errorContent = readFileSync(errorPath, 'utf-8');
-  const errorLines = errorContent.trim().split('\n').filter(line => line.trim());
+  const errorLines = errorContent
+    .trim()
+    .split('\n')
+    .filter((line) => line.trim());
 
   console.log(`\nError log entries: ${errorLines.length}`);
 

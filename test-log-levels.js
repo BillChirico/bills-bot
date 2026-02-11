@@ -10,7 +10,7 @@
  * - error level: shows only error
  */
 
-import { debug, info, warn, error } from './src/logger.js';
+import { debug, error, info, warn } from './src/logger.js';
 
 console.log('\n=== Log Level Verification Test ===\n');
 console.log(`Current LOG_LEVEL: ${process.env.LOG_LEVEL || 'info (default)'}`);
@@ -27,32 +27,32 @@ debug('DEBUG: Testing nested metadata', {
   user: 'testUser',
   context: {
     channel: 'test-channel',
-    guild: 'test-guild'
-  }
+    guild: 'test-guild',
+  },
 });
 
 info('INFO: Testing nested metadata', {
   user: 'testUser',
   context: {
     channel: 'test-channel',
-    guild: 'test-guild'
-  }
+    guild: 'test-guild',
+  },
 });
 
 warn('WARN: Testing nested metadata', {
   user: 'testUser',
   context: {
     channel: 'test-channel',
-    guild: 'test-guild'
-  }
+    guild: 'test-guild',
+  },
 });
 
 error('ERROR: Testing nested metadata', {
   user: 'testUser',
   context: {
     channel: 'test-channel',
-    guild: 'test-guild'
-  }
+    guild: 'test-guild',
+  },
 });
 
 console.log('\n=== Test Complete ===');

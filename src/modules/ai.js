@@ -3,7 +3,7 @@
  * Handles AI chat functionality powered by Claude via OpenClaw
  */
 
-import { info, warn } from '../logger.js';
+import { info } from '../logger.js';
 
 // Conversation history per channel (simple in-memory store)
 let conversationHistory = new Map();
@@ -26,7 +26,8 @@ export function setConversationHistory(history) {
 }
 
 // OpenClaw API endpoint (exported for shared use by other modules)
-export const OPENCLAW_URL = process.env.OPENCLAW_URL || 'http://localhost:18789/v1/chat/completions';
+export const OPENCLAW_URL =
+  process.env.OPENCLAW_URL || 'http://localhost:18789/v1/chat/completions';
 export const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
 
 /**
@@ -66,10 +67,18 @@ export function addToHistory(channelId, role, content) {
  * @param {Object} healthMonitor - Health monitor instance (optional)
  * @returns {Promise<string>} AI response
  */
-export async function generateResponse(channelId, userMessage, username, config, healthMonitor = null) {
+export async function generateResponse(
+  channelId,
+  userMessage,
+  username,
+  config,
+  healthMonitor = null,
+) {
   const history = getHistory(channelId);
 
-  const systemPrompt = config.ai?.systemPrompt || `You are Volvox Bot, a helpful and friendly Discord bot for the Volvox developer community.
+  const systemPrompt =
+    config.ai?.systemPrompt ||
+    `You are Volvox Bot, a helpful and friendly Discord bot for the Volvox developer community.
 You're witty, knowledgeable about programming and tech, and always eager to help.
 Keep responses concise and Discord-friendly (under 2000 chars).
 You can use Discord markdown formatting.`;
@@ -78,7 +87,7 @@ You can use Discord markdown formatting.`;
   const messages = [
     { role: 'system', content: systemPrompt },
     ...history,
-    { role: 'user', content: `${username}: ${userMessage}` }
+    { role: 'user', content: `${username}: ${userMessage}` },
   ];
 
   // Log incoming AI request
@@ -89,7 +98,7 @@ You can use Discord markdown formatting.`;
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(OPENCLAW_TOKEN && { 'Authorization': `Bearer ${OPENCLAW_TOKEN}` })
+        ...(OPENCLAW_TOKEN && { Authorization: `Bearer ${OPENCLAW_TOKEN}` }),
       },
       body: JSON.stringify({
         model: config.ai?.model || 'claude-sonnet-4-20250514',
@@ -106,7 +115,7 @@ You can use Discord markdown formatting.`;
     }
 
     const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || "I got nothing. Try again?";
+    const reply = data.choices?.[0]?.message?.content || 'I got nothing. Try again?';
 
     // Log AI response
     info('AI response', { channelId, username, response: reply.substring(0, 500) });

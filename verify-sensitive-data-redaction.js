@@ -5,10 +5,10 @@
  * in both console and file output.
  */
 
-import { info, warn, error } from './src/logger.js';
-import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { error, info, warn } from './src/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const logsDir = join(__dirname, 'logs');
@@ -23,7 +23,7 @@ console.log('Test 1: Direct sensitive fields...');
 info('Testing direct sensitive fields', {
   DISCORD_TOKEN: 'MTk4OTg2MjQ3ODk4NjI0MDAwMA.GXxxXX.xxxxxxxxxxxxxxxxxxxxxxxx',
   OPENCLAW_TOKEN: 'sk-test-1234567890abcdefghijklmnop',
-  username: 'test-user'
+  username: 'test-user',
 });
 console.log('✓ Logged with DISCORD_TOKEN and OPENCLAW_TOKEN\n');
 
@@ -34,7 +34,7 @@ warn('Testing case variations', {
   Token: 'should-be-redacted',
   PASSWORD: 'should-be-redacted',
   apikey: 'should-be-redacted',
-  Authorization: 'Bearer should-be-redacted'
+  Authorization: 'Bearer should-be-redacted',
 });
 console.log('✓ Logged with various case variations\n');
 
@@ -44,14 +44,14 @@ info('Testing nested sensitive data', {
   config: {
     database: {
       host: 'localhost',
-      password: 'db-password-123'
+      password: 'db-password-123',
     },
     api: {
       endpoint: 'https://api.example.com',
       DISCORD_TOKEN: 'nested-token-value',
-      apiKey: 'nested-api-key'
-    }
-  }
+      apiKey: 'nested-api-key',
+    },
+  },
 });
 console.log('✓ Logged with nested sensitive data\n');
 
@@ -60,8 +60,8 @@ console.log('Test 4: Arrays containing sensitive data...');
 info('Testing arrays with sensitive data', {
   tokens: [
     { name: 'discord', token: 'token-1' },
-    { name: 'openclaw', OPENCLAW_TOKEN: 'token-2' }
-  ]
+    { name: 'openclaw', OPENCLAW_TOKEN: 'token-2' },
+  ],
 });
 console.log('✓ Logged with arrays containing sensitive data\n');
 
@@ -76,13 +76,13 @@ error('Testing mixed data', {
   password: 'user-password',
   metadata: {
     version: '1.0.0',
-    authorization: 'Bearer secret-token'
-  }
+    authorization: 'Bearer secret-token',
+  },
 });
 console.log('✓ Logged with mixed safe and sensitive data\n');
 
 // Wait a moment for file writes to complete
-await new Promise(resolve => setTimeout(resolve, 1000));
+await new Promise((resolve) => setTimeout(resolve, 1000));
 
 console.log('='.repeat(70));
 console.log('VERIFYING LOG FILES');
@@ -94,9 +94,10 @@ if (!existsSync(logsDir)) {
   console.log('   This is OK if fileOutput is set to false in config.json\n');
 } else {
   // Find the most recent combined log file
-  const fs = await import('fs');
-  const files = fs.readdirSync(logsDir)
-    .filter(f => f.startsWith('combined-') && f.endsWith('.log'))
+  const fs = await import('node:fs');
+  const files = fs
+    .readdirSync(logsDir)
+    .filter((f) => f.startsWith('combined-') && f.endsWith('.log'))
     .sort()
     .reverse();
 
@@ -107,22 +108,22 @@ if (!existsSync(logsDir)) {
     console.log(`Reading log file: ${files[0]}\n`);
 
     const logContent = readFileSync(logFile, 'utf-8');
-    const lines = logContent.trim().split('\n');
+    const _lines = logContent.trim().split('\n');
 
     // Check for any exposed tokens
     const sensitivePatterns = [
-      /MTk4OTg2MjQ3ODk4NjI0MDAwMA/,  // Example Discord token
-      /sk-test-\d+/,                    // Example OpenClaw token
-      /"password":"(?!\[REDACTED\])/,   // Password not redacted
-      /"token":"(?!\[REDACTED\])/,      // Token not redacted
-      /"apiKey":"(?!\[REDACTED\])/,     // API key not redacted
-      /Bearer secret-token/,             // Authorization header
-      /db-password-123/,                 // Database password
-      /nested-token-value/,              // Nested token
-      /nested-api-key/,                  // Nested API key
-      /token-1/,                         // Array token
-      /token-2/,                         // Array OPENCLAW_TOKEN
-      /user-password/                    // User password
+      /MTk4OTg2MjQ3ODk4NjI0MDAwMA/, // Example Discord token
+      /sk-test-\d+/, // Example OpenClaw token
+      /"password":"(?!\[REDACTED\])/, // Password not redacted
+      /"token":"(?!\[REDACTED\])/, // Token not redacted
+      /"apiKey":"(?!\[REDACTED\])/, // API key not redacted
+      /Bearer secret-token/, // Authorization header
+      /db-password-123/, // Database password
+      /nested-token-value/, // Nested token
+      /nested-api-key/, // Nested API key
+      /token-1/, // Array token
+      /token-2/, // Array OPENCLAW_TOKEN
+      /user-password/, // User password
     ];
 
     let exposedCount = 0;
@@ -138,7 +139,9 @@ if (!existsSync(logsDir)) {
     if (exposedCount > 0) {
       console.log('❌ FAILED: Found exposed sensitive data!');
       console.log(`   ${exposedCount} pattern(s) were not properly redacted:`);
-      exposedPatterns.forEach(p => console.log(`   - ${p}`));
+      for (const p of exposedPatterns) {
+        console.log(`   - ${p}`);
+      }
       console.log();
       process.exit(1);
     }
@@ -155,7 +158,7 @@ if (!existsSync(logsDir)) {
       { field: 'password', expected: '[REDACTED]' },
       { field: 'token', expected: '[REDACTED]' },
       { field: 'apiKey', expected: '[REDACTED]' },
-      { field: 'authorization', expected: '[REDACTED]' }
+      { field: 'authorization', expected: '[REDACTED]' },
     ];
 
     console.log('Field-specific verification:');

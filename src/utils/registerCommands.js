@@ -25,7 +25,7 @@ export async function registerCommands(commands, clientId, token, guildId = null
   }
 
   // Convert command modules to JSON for API
-  const commandData = commands.map(cmd => {
+  const commandData = commands.map((cmd) => {
     if (!cmd.data || typeof cmd.data.toJSON !== 'function') {
       throw new Error('Each command must have a .data property with toJSON() method');
     }
@@ -40,19 +40,17 @@ export async function registerCommands(commands, clientId, token, guildId = null
     let data;
     if (guildId) {
       // Guild-specific commands (instant updates, good for development)
-      data = await rest.put(
-        Routes.applicationGuildCommands(clientId, guildId),
-        { body: commandData }
-      );
+      data = await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+        body: commandData,
+      });
     } else {
       // Global commands (can take up to 1 hour to update)
-      data = await rest.put(
-        Routes.applicationCommands(clientId),
-        { body: commandData }
-      );
+      data = await rest.put(Routes.applicationCommands(clientId), { body: commandData });
     }
 
-    console.log(`✅ Successfully registered ${data.length} slash command(s)${guildId ? ' (guild)' : ' (global)'}`);
+    console.log(
+      `✅ Successfully registered ${data.length} slash command(s)${guildId ? ' (guild)' : ' (global)'}`,
+    );
   } catch (err) {
     console.error('❌ Failed to register commands:', err.message);
     throw err;

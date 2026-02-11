@@ -3,11 +3,11 @@
  * Handles Discord event listeners and handlers
  */
 
-import { sendWelcomeMessage, recordCommunityActivity } from './welcome.js';
-import { isSpam, sendSpamAlert } from './spam.js';
+import { needsSplitting, splitMessage } from '../utils/splitMessage.js';
 import { generateResponse } from './ai.js';
 import { accumulate, resetCounter } from './chimeIn.js';
-import { splitMessage, needsSplitting } from '../utils/splitMessage.js';
+import { isSpam, sendSpamAlert } from './spam.js';
+import { recordCommunityActivity, sendWelcomeMessage } from './welcome.js';
 
 /**
  * Register bot ready event handler
@@ -77,7 +77,8 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
 
       // Check if in allowed channel (if configured)
       const allowedChannels = config.ai?.channels || [];
-      const isAllowedChannel = allowedChannels.length === 0 || allowedChannels.includes(message.channel.id);
+      const isAllowedChannel =
+        allowedChannels.length === 0 || allowedChannels.includes(message.channel.id);
 
       if ((isMentioned || isReply) && isAllowedChannel) {
         // Reset chime-in counter so we don't double-respond
@@ -100,7 +101,7 @@ export function registerMessageCreateHandler(client, config, healthMonitor) {
           cleanContent,
           message.author.username,
           config,
-          healthMonitor
+          healthMonitor,
         );
 
         // Split long responses
