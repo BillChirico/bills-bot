@@ -371,11 +371,10 @@ function getSuggestedChannels(member, config, snapshot) {
 
   const channelIds = [...new Set([...top, ...configured, ...legacy])]
     .filter(Boolean)
+    .filter(id => member.guild.channels.cache.has(id))
     .slice(0, 3);
 
-  return channelIds
-    .filter(id => member.guild.channels.cache.has(id))
-    .map(id => `<#${id}>`);
+  return channelIds.map(id => `<#${id}>`);
 }
 
 /**
