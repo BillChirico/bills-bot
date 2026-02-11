@@ -154,7 +154,7 @@ function hydrateHistory(channelId) {
         const merged = [...dbHistory, ...arr];
 
         // Mutate the existing array in-place so callers holding references
-        // (e.g. getHistory callers) observe hydrated contents.
+        // (e.g. getHistoryAsync callers) observe hydrated contents.
         arr.length = 0;
         arr.push(...merged.slice(-limit));
 
@@ -183,24 +183,7 @@ function hydrateHistory(channelId) {
 }
 
 /**
- * Get or create conversation history for a channel.
- * Returns in-memory history immediately and triggers async hydration on cache miss.
- * Prefer getHistoryAsync when callers need hydrated data before proceeding.
- * @param {string} channelId - Channel ID
- * @returns {Array} Conversation history
- */
-export function getHistory(channelId) {
-  if (!conversationHistory.has(channelId)) {
-    conversationHistory.set(channelId, []);
-    // Best-effort async DB fallback on cache miss (non-blocking).
-    void hydrateHistory(channelId);
-  }
-
-  return conversationHistory.get(channelId);
-}
-
-/**
- * Async version of getHistory that waits for in-flight hydration.
+ * Async version of history retrieval that waits for in-flight hydration.
  * @param {string} channelId - Channel ID
  * @returns {Promise<Array>} Conversation history
  */

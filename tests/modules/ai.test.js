@@ -24,7 +24,6 @@ import {
   addToHistory,
   generateResponse,
   getConversationHistory,
-  getHistory,
   getHistoryAsync,
   initConversationHistory,
   OPENCLAW_TOKEN,
@@ -67,15 +66,15 @@ describe('ai module', () => {
     });
   });
 
-  describe('getHistory', () => {
-    it('should create empty history for new channel', () => {
-      const history = getHistory('new-channel');
+  describe('getHistoryAsync', () => {
+    it('should create empty history for new channel', async () => {
+      const history = await getHistoryAsync('new-channel');
       expect(history).toEqual([]);
     });
 
-    it('should return existing history for known channel', () => {
+    it('should return existing history for known channel', async () => {
       addToHistory('ch1', 'user', 'hello');
-      const history = getHistory('ch1');
+      const history = await getHistoryAsync('ch1');
       expect(history.length).toBe(1);
       expect(history[0]).toEqual({ role: 'user', content: 'hello' });
     });
@@ -93,13 +92,17 @@ describe('ai module', () => {
       const mockPool = { query: mockQuery };
       setPool(mockPool);
 
-      const historyRef = getHistory('race-channel');
+      // Start hydration by calling getHistoryAsync (but don't await yet)
+      const asyncHistoryPromise = getHistoryAsync('race-channel');
+      
+      // We know it's pending, so we can check the in-memory state via getConversationHistory
+      const historyRef = getConversationHistory().get('race-channel');
       expect(historyRef).toEqual([]);
 
       // Add a message while DB hydration is still pending
       addToHistory('race-channel', 'user', 'concurrent message');
 
-      // DB returns newest-first; getHistory() reverses into chronological order
+      // DB returns newest-first; hydrateHistory() reverses into chronological order
       resolveHydration({
         rows: [
           { role: 'assistant', content: 'db reply' },
@@ -108,6 +111,7 @@ describe('ai module', () => {
       });
 
       await hydrationPromise;
+      await asyncHistoryPromise;
 
       await vi.waitFor(() => {
         expect(historyRef).toEqual([
@@ -115,35 +119,35 @@ describe('ai module', () => {
           { role: 'assistant', content: 'db reply' },
           { role: 'user', content: 'concurrent message' },
         ]);
-        expect(getHistory('race-channel')).toBe(historyRef);
+        expect(getConversationHistory().get('race-channel')).toBe(historyRef);
       });
     });
   });
 
   describe('addToHistory', () => {
-    it('should add messages to channel history', () => {
+    it('should add messages to channel history', async () => {
       addToHistory('ch1', 'user', 'hello');
       addToHistory('ch1', 'assistant', 'hi there');
-      const history = getHistory('ch1');
+      const history = await getHistoryAsync('ch1');
       expect(history.length).toBe(2);
     });
 
-    it('should trim history beyond configured historyLength (20)', () => {
+    it('should trim history beyond configured historyLength (20)', async () => {
       for (let i = 0; i < 25; i++) {
         addToHistory('ch1', 'user', `message ${i}`);
       }
-      const history = getHistory('ch1');
+      const history = await getHistoryAsync('ch1');
       expect(history.length).toBe(20);
       expect(history[0].content).toBe('message 5');
     });
 
-    it('should respect custom historyLength from config', () => {
+    it('should respect custom historyLength from config', async () => {
       getConfig.mockReturnValue({ ai: { historyLength: 5, historyTTLDays: 30 } });
 
       for (let i = 0; i < 10; i++) {
         addToHistory('ch1', 'user', `message ${i}`);
       }
-      const history = getHistory('ch1');
+      const history = await getHistoryAsync('ch1');
       expect(history.length).toBe(5);
       expect(history[0].content).toBe('message 5');
     });
@@ -185,10 +189,10 @@ describe('ai module', () => {
       });
     });
 
-    it('should work without DB (graceful fallback)', () => {
+    it('should work without DB (graceful fallback)', async () => {
       setPool(null);
       addToHistory('ch1', 'user', 'hello');
-      const history = getHistory('ch1');
+      const history = await getHistoryAsync('ch1');
       expect(history.length).toBe(1);
     });
 
@@ -263,37 +267,6 @@ describe('ai module', () => {
       expect(h1).toEqual([{ role: 'user', content: 'hydrated once' }]);
     });
 
-    it('should await hydration started by getHistory on cache miss', async () => {
-      let resolveHydration;
-      const mockQuery = vi.fn().mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            resolveHydration = resolve;
-          }),
-      );
-      const mockPool = { query: mockQuery };
-      setPool(mockPool);
-
-      const historyRef = getHistory('ch-sync-first');
-      expect(historyRef).toEqual([]);
-
-      const asyncHistoryPromise = getHistoryAsync('ch-sync-first');
-      const raceResult = await Promise.race([
-        asyncHistoryPromise.then(() => 'hydrated'),
-        Promise.resolve('pending'),
-      ]);
-      expect(raceResult).toBe('pending');
-
-      resolveHydration({
-        rows: [{ role: 'user', content: 'from db' }],
-      });
-
-      const hydratedHistory = await asyncHistoryPromise;
-      expect(mockQuery).toHaveBeenCalledTimes(1);
-      expect(hydratedHistory).toBe(historyRef);
-      expect(hydratedHistory).toEqual([{ role: 'user', content: 'from db' }]);
-    });
-
     it('should return empty array when DB has no data', async () => {
       const mockQuery = vi.fn().mockResolvedValue({ rows: [] });
       const mockPool = { query: mockQuery };
@@ -345,13 +318,13 @@ describe('ai module', () => {
 
       await initConversationHistory();
 
-      const ch1 = getHistory('ch1');
+      const ch1 = await getHistoryAsync('ch1');
       expect(ch1.length).toBe(2);
       // Rows are already chronological per channel: msg1 then reply1
       expect(ch1[0].content).toBe('msg1');
       expect(ch1[1].content).toBe('reply1');
 
-      const ch2 = getHistory('ch2');
+      const ch2 = await getHistoryAsync('ch2');
       expect(ch2.length).toBe(1);
 
       expect(mockQuery).toHaveBeenCalledTimes(1);
@@ -387,7 +360,7 @@ describe('ai module', () => {
 
       await initConversationHistory();
 
-      expect(getHistory('ch1')).toEqual([
+      expect(await getHistoryAsync('ch1')).toEqual([
         { role: 'user', content: 'db-msg' },
         { role: 'assistant', content: 'db-reply' },
       ]);
@@ -621,7 +594,7 @@ describe('ai module', () => {
       const config = { ai: {} };
       await generateResponse('ch1', 'Hello', 'user1', config);
 
-      const history = getHistory('ch1');
+      const history = await getHistoryAsync('ch1');
       expect(history.length).toBe(2);
       expect(history[0].role).toBe('user');
       expect(history[0].content).toContain('user1: Hello');
@@ -672,19 +645,19 @@ describe('ai module', () => {
   });
 
   describe('graceful fallback (sub_6)', () => {
-    it('should work entirely in-memory without any DB', () => {
+    it('should work entirely in-memory without any DB', async () => {
       setPool(null);
 
       addToHistory('ch1', 'user', 'hello');
       addToHistory('ch1', 'assistant', 'world');
 
-      const history = getHistory('ch1');
+      const history = await getHistoryAsync('ch1');
       expect(history.length).toBe(2);
       expect(history[0]).toEqual({ role: 'user', content: 'hello' });
       expect(history[1]).toEqual({ role: 'assistant', content: 'world' });
     });
 
-    it('should handle config getConfig throwing', () => {
+    it('should handle config getConfig throwing', async () => {
       getConfig.mockImplementation(() => {
         throw new Error('config not loaded');
       });
@@ -693,7 +666,7 @@ describe('ai module', () => {
       for (let i = 0; i < 25; i++) {
         addToHistory('ch1', 'user', `msg ${i}`);
       }
-      const history = getHistory('ch1');
+      const history = await getHistoryAsync('ch1');
       expect(history.length).toBe(20);
     });
   });
