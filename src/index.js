@@ -11,7 +11,7 @@
  * - Structured logging
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
@@ -22,6 +22,7 @@ import { getConversationHistory, setConversationHistory } from './modules/ai.js'
 import { loadConfig } from './modules/config.js';
 import { registerEventHandlers } from './modules/events.js';
 import { HealthMonitor } from './utils/health.js';
+import { loadCommands as loadCommandModules } from './utils/loadCommands.js';
 import { getPermissionError, hasPermission } from './utils/permissions.js';
 import { registerCommands } from './utils/registerCommands.js';
 
@@ -124,22 +125,10 @@ function loadState() {
  * Load all commands from the commands directory
  */
 async function loadCommands() {
-  const commandsPath = join(__dirname, 'commands');
-  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
-
-  for (const file of commandFiles) {
-    const filePath = join(commandsPath, file);
-    try {
-      const command = await import(filePath);
-      if (command.data && command.execute) {
-        client.commands.set(command.data.name, command);
-        info('Loaded command', { command: command.data.name });
-      } else {
-        warn('Command missing data or execute export', { file });
-      }
-    } catch (err) {
-      error('Failed to load command', { file, error: err.message });
-    }
+  const commands = await loadCommandModules();
+  for (const command of commands) {
+    client.commands.set(command.data.name, command);
+    info('Loaded command', { command: command.data.name });
   }
 }
 

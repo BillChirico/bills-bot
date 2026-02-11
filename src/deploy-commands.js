@@ -10,16 +10,12 @@
  *   GUILD_ID (optional)
  */
 
-import { readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { config as dotenvConfig } from 'dotenv';
-import { error as logError, warn as logWarn } from './logger.js';
+import { error as logError } from './logger.js';
+import { loadCommands } from './utils/loadCommands.js';
 import { registerCommands } from './utils/registerCommands.js';
 
 dotenvConfig();
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
@@ -33,23 +29,6 @@ if (!token) {
 if (!clientId) {
   logError('DISCORD_CLIENT_ID (or legacy CLIENT_ID) is required');
   process.exit(1);
-}
-
-async function loadCommands() {
-  const commandsPath = join(__dirname, 'commands');
-  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
-  const commands = [];
-
-  for (const file of commandFiles) {
-    const command = await import(join(commandsPath, file));
-    if (command.data && command.execute) {
-      commands.push(command);
-    } else {
-      logWarn(`Skipping ${file}: missing .data or .execute export`);
-    }
-  }
-
-  return commands;
 }
 
 async function main() {
