@@ -7,6 +7,9 @@ const guildActivity = new Map();
 const DEFAULT_ACTIVITY_WINDOW_MINUTES = 45;
 const MAX_EVENTS_PER_CHANNEL = 250;
 
+/** @type {{key: string, set: Set<string>} | null} Cached excluded channels Set */
+let excludedChannelsCache = null;
+
 /**
  * Render welcome message with placeholder replacements
  * @param {string} messageTemplate - Welcome message template
@@ -33,8 +36,12 @@ export function recordCommunityActivity(message, config) {
   if (!message.channel?.isTextBased?.()) return;
 
   const welcomeDynamic = config?.welcome?.dynamic || {};
-  const excludedChannels = new Set(welcomeDynamic.excludeChannels || []);
-  if (excludedChannels.has(message.channel.id)) return;
+  const excludeList = welcomeDynamic.excludeChannels || [];
+  const cacheKey = excludeList.join(',');
+  if (!excludedChannelsCache || excludedChannelsCache.key !== cacheKey) {
+    excludedChannelsCache = { key: cacheKey, set: new Set(excludeList) };
+  }
+  if (excludedChannelsCache.set.has(message.channel.id)) return;
 
   const now = Date.now();
   const windowMs = getActivityWindowMs(welcomeDynamic);
