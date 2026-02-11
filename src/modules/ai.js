@@ -131,9 +131,21 @@ export function getHistory(channelId) {
         )
         .then(({ rows }) => {
           if (rows.length > 0) {
-            const history = rows.reverse().map((row) => ({ role: row.role, content: row.content }));
-            conversationHistory.set(channelId, history);
-            info('Hydrated history from DB for channel', { channelId, count: history.length });
+            const dbHistory = rows
+              .reverse()
+              .map((row) => ({ role: row.role, content: row.content }));
+            // Mutate the existing array in place to avoid overwriting concurrent writes
+            const currentHistory = conversationHistory.get(channelId);
+            if (currentHistory) {
+              // Prepend DB results to any messages added during the race window
+              currentHistory.unshift(...dbHistory);
+              // Trim to history limit if needed
+              const maxHistory = getHistoryLength();
+              while (currentHistory.length > maxHistory) {
+                currentHistory.shift();
+              }
+            }
+            info('Hydrated history from DB for channel', { channelId, count: dbHistory.length });
           }
         })
         .catch((err) => {
