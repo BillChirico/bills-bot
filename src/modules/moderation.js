@@ -321,11 +321,18 @@ export async function checkEscalation(
       const member = await guild.members.fetch(targetId).catch(() => null);
 
       if (threshold.action === 'timeout') {
-        if (!member) continue;
         const ms = parseDuration(threshold.duration);
-        if (ms) {
-          await member.timeout(ms, reason);
+        if (!member || !ms) {
+          logError('Escalation skipped: unable to timeout', {
+            guildId,
+            targetId,
+            threshold,
+            hasMember: !!member,
+            parsedMs: ms,
+          });
+          return null;
         }
+        await member.timeout(ms, reason);
       } else if (threshold.action === 'ban') {
         await guild.members.ban(targetId, { reason });
       }
