@@ -523,6 +523,12 @@ describe('moderation module', () => {
       const target = { roles: { highest: { position: 5 } } };
       expect(checkHierarchy(moderator, target)).toContain('cannot moderate');
     });
+
+    it('should return error when target is higher', () => {
+      const moderator = { roles: { highest: { position: 3 } } };
+      const target = { roles: { highest: { position: 10 } } };
+      expect(checkHierarchy(moderator, target)).toContain('cannot moderate');
+    });
   });
 
   describe('shouldSendDm', () => {
@@ -533,6 +539,11 @@ describe('moderation module', () => {
 
     it('should return false when disabled', () => {
       const config = { moderation: { dmNotifications: { warn: false } } };
+      expect(shouldSendDm(config, 'warn')).toBe(false);
+    });
+
+    it('should return false when action is not configured', () => {
+      const config = { moderation: {} };
       expect(shouldSendDm(config, 'warn')).toBe(false);
     });
   });
