@@ -153,7 +153,7 @@ describe('softban command', () => {
     expect(interaction.guild.members.ban).not.toHaveBeenCalled();
   });
 
-  it('should handle errors gracefully', async () => {
+  it('should handle errors gracefully without leaking internal details', async () => {
     createCase.mockRejectedValueOnce(new Error('DB error'));
     const { interaction } = createInteraction();
 
@@ -162,5 +162,6 @@ describe('softban command', () => {
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.stringContaining('An error occurred'),
     );
+    expect(interaction.editReply).not.toHaveBeenCalledWith(expect.stringContaining('DB error'));
   });
 });
