@@ -144,9 +144,11 @@ describe('purge command', () => {
         mockMessage({ authorId: '100', content: 'from target' }),
         mockMessage({ authorId: '200', content: 'from other' }),
       ]);
+      const deleted = mockCollection([mockMessage({ authorId: '100', content: 'from target' })]);
       const { interaction } = buildInteraction('user', {
         messages,
         user: { id: '100', tag: 'Target#0001' },
+        deletedResult: deleted,
       });
 
       await execute(interaction);
@@ -156,6 +158,7 @@ describe('purge command', () => {
       for (const [, msg] of bulkDeleteCall) {
         expect(msg.author.id).toBe('100');
       }
+      expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('1'));
     });
 
     it('should filter bot messages with "bot" subcommand', async () => {
@@ -163,13 +166,15 @@ describe('purge command', () => {
         mockMessage({ bot: true, content: 'bot message' }),
         mockMessage({ bot: false, content: 'human message' }),
       ]);
-      const { interaction } = buildInteraction('bot', { messages });
+      const deleted = mockCollection([mockMessage({ bot: true, content: 'bot message' })]);
+      const { interaction } = buildInteraction('bot', { messages, deletedResult: deleted });
 
       await execute(interaction);
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
       expect(bulkDeleteCall.values().next().value.content).toBe('bot message');
+      expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('1'));
     });
 
     it('should filter by text with "contains" subcommand', async () => {
@@ -177,13 +182,19 @@ describe('purge command', () => {
         mockMessage({ content: 'this has TEST word' }),
         mockMessage({ content: 'no match here' }),
       ]);
-      const { interaction } = buildInteraction('contains', { messages, text: 'test' });
+      const deleted = mockCollection([mockMessage({ content: 'this has TEST word' })]);
+      const { interaction } = buildInteraction('contains', {
+        messages,
+        text: 'test',
+        deletedResult: deleted,
+      });
 
       await execute(interaction);
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
       expect(bulkDeleteCall.values().next().value.content).toBe('this has TEST word');
+      expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('1'));
     });
 
     it('should filter links with "links" subcommand', async () => {
@@ -191,13 +202,17 @@ describe('purge command', () => {
         mockMessage({ content: 'check https://example.com' }),
         mockMessage({ content: 'no link here' }),
       ]);
-      const { interaction } = buildInteraction('links', { messages });
+      const deleted = mockCollection([
+        mockMessage({ content: 'check https://example.com' }),
+      ]);
+      const { interaction } = buildInteraction('links', { messages, deletedResult: deleted });
 
       await execute(interaction);
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
       expect(bulkDeleteCall.values().next().value.content).toBe('check https://example.com');
+      expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('1'));
     });
 
     it('should filter attachments with "attachments" subcommand', async () => {
@@ -205,13 +220,18 @@ describe('purge command', () => {
         mockMessage({ attachmentCount: 2, content: 'has file' }),
         mockMessage({ attachmentCount: 0, content: 'no file' }),
       ]);
-      const { interaction } = buildInteraction('attachments', { messages });
+      const deleted = mockCollection([mockMessage({ attachmentCount: 2, content: 'has file' })]);
+      const { interaction } = buildInteraction('attachments', {
+        messages,
+        deletedResult: deleted,
+      });
 
       await execute(interaction);
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
       expect(bulkDeleteCall.values().next().value.content).toBe('has file');
+      expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('1'));
     });
 
     it('should filter out messages older than 14 days', async () => {
