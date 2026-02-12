@@ -202,9 +202,7 @@ describe('purge command', () => {
         mockMessage({ content: 'check https://example.com' }),
         mockMessage({ content: 'no link here' }),
       ]);
-      const deleted = mockCollection([
-        mockMessage({ content: 'check https://example.com' }),
-      ]);
+      const deleted = mockCollection([mockMessage({ content: 'check https://example.com' })]);
       const { interaction } = buildInteraction('links', { messages, deletedResult: deleted });
 
       await execute(interaction);
