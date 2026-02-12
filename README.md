@@ -12,6 +12,7 @@ AI-powered Discord bot for the [Volvox](https://volvox.dev) developer community.
 - **🎯 Chime-In** — Bot can organically join conversations when it has something relevant to add (configurable per-channel).
 - **👋 Dynamic Welcome Messages** — Contextual onboarding with time-of-day greetings, community activity snapshots, member milestones, and highlight channels.
 - **🛡️ Spam Detection** — Pattern-based scam/spam detection with mod alerts and optional auto-delete.
+- **⚔️ Moderation Suite** — Full-featured mod toolkit: warn, kick, ban, tempban, softban, timeout, purge, lock/unlock, slowmode. Includes case management, mod log routing, DM notifications, auto-escalation, and tempban scheduling.
 - **⚙️ Config Management** — All settings stored in PostgreSQL with live `/config` slash command for runtime changes.
 - **📊 Health Monitoring** — Built-in health checks and `/status` command for uptime, memory, and latency stats.
 - **🎤 Voice Activity Tracking** — Tracks voice channel activity for community insights.
@@ -148,6 +149,21 @@ All configuration lives in `config.json` and can be updated at runtime via the `
 | `enabled` | boolean | Enable spam detection |
 | `alertChannelId` | string | Channel for mod alerts |
 | `autoDelete` | boolean | Auto-delete detected spam |
+| `dmNotifications.warn` | boolean | DM users when warned |
+| `dmNotifications.timeout` | boolean | DM users when timed out |
+| `dmNotifications.kick` | boolean | DM users when kicked |
+| `dmNotifications.ban` | boolean | DM users when banned |
+| `escalation.enabled` | boolean | Enable auto-escalation after repeated warns |
+| `escalation.thresholds` | array | Escalation rules (see below) |
+| `logging.channels.default` | string | Fallback mod log channel ID |
+| `logging.channels.warns` | string | Channel for warn events |
+| `logging.channels.bans` | string | Channel for ban/unban events |
+| `logging.channels.kicks` | string | Channel for kick events |
+| `logging.channels.timeouts` | string | Channel for timeout events |
+| `logging.channels.purges` | string | Channel for purge events |
+| `logging.channels.locks` | string | Channel for lock/unlock events |
+
+**Escalation thresholds** are objects with: `warns` (count), `withinDays` (window), `action` ("timeout" or "ban"), `duration` (for timeout, e.g. "1h").
 
 ### Permissions (`permissions`)
 
@@ -156,6 +172,60 @@ All configuration lives in `config.json` and can be updated at runtime via the `
 | `enabled` | boolean | Enable permission checks |
 | `adminRoleId` | string | Role ID for admin commands |
 | `allowedCommands` | object | Per-command permission levels |
+
+## ⚔️ Moderation Commands
+
+All moderation commands require the admin role (configured via `permissions.adminRoleId`).
+
+### Core Actions
+
+| Command | Description |
+|---------|-------------|
+| `/warn <user> [reason]` | Issue a warning |
+| `/kick <user> [reason]` | Remove from server |
+| `/timeout <user> <duration> [reason]` | Temporarily mute (up to 28 days) |
+| `/untimeout <user> [reason]` | Remove active timeout |
+| `/ban <user> [reason] [delete_days]` | Permanent ban |
+| `/tempban <user> <duration> [reason] [delete_days]` | Temporary ban with auto-unban |
+| `/unban <user_id> [reason]` | Unban by user ID |
+| `/softban <user> [reason] [delete_days]` | Ban + immediate unban (purges messages) |
+
+### Message Management
+
+| Command | Description |
+|---------|-------------|
+| `/purge all <count>` | Bulk delete messages (1–100) |
+| `/purge user <user> <count>` | Delete messages from a specific user |
+| `/purge bot <count>` | Delete bot messages only |
+| `/purge contains <text> <count>` | Delete messages containing text |
+| `/purge links <count>` | Delete messages with URLs |
+| `/purge attachments <count>` | Delete messages with files/images |
+
+### Case Management
+
+| Command | Description |
+|---------|-------------|
+| `/case view <case_id>` | View a specific case |
+| `/case list [user] [type]` | List recent cases with optional filters |
+| `/case reason <case_id> <reason>` | Update a case's reason |
+| `/case delete <case_id>` | Delete a case |
+| `/history <user>` | View full mod history for a user |
+
+### Channel Control
+
+| Command | Description |
+|---------|-------------|
+| `/lock [channel] [reason]` | Prevent @everyone from sending messages |
+| `/unlock [channel] [reason]` | Restore send permissions |
+| `/slowmode <duration> [channel]` | Set channel slowmode (0 to disable) |
+
+### Mod Log Configuration
+
+| Command | Description |
+|---------|-------------|
+| `/modlog setup` | Interactive channel routing with select menus |
+| `/modlog view` | View current log routing config |
+| `/modlog disable` | Disable all mod logging |
 
 ## 🛠️ Development
 

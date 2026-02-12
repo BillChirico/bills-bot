@@ -29,6 +29,7 @@
 | `src/modules/chimeIn.js` | Organic conversation joining logic |
 | `src/modules/welcome.js` | Dynamic welcome message generation |
 | `src/modules/spam.js` | Spam/scam pattern detection |
+| `src/modules/moderation.js` | Moderation — case creation, DM notifications, mod log embeds, escalation, tempban scheduler |
 | `src/modules/config.js` | Config loading/saving (DB + file), runtime updates |
 | `src/modules/events.js` | Event handler registration (wires modules to Discord events) |
 | `src/utils/errors.js` | Error classes and handling utilities |
@@ -37,6 +38,7 @@
 | `src/utils/retry.js` | Retry utility for flaky operations |
 | `src/utils/registerCommands.js` | Discord REST API command registration |
 | `src/utils/splitMessage.js` | Message splitting for Discord's 2000-char limit |
+| `src/utils/duration.js` | Duration parsing — "1h", "7d" ↔ ms with human-readable formatting |
 | `config.json` | Default configuration (seeded to DB on first run) |
 | `.env.example` | Environment variable template |
 
@@ -87,9 +89,31 @@ export async function execute(interaction) {
 }
 ```
 
-2. Commands are auto-discovered from `src/commands/` on startup
-3. Run `pnpm run deploy` to register with Discord (or restart the bot)
-4. Add permission in `config.json` under `permissions.allowedCommands`
+2. Export `adminOnly = true` for mod-only commands
+3. Commands are auto-discovered from `src/commands/` on startup
+4. Run `pnpm run deploy` to register with Discord (or restart the bot)
+5. Add permission in `config.json` under `permissions.allowedCommands`
+
+### Moderation Command Pattern
+
+Moderation commands follow a shared pattern via `src/modules/moderation.js`:
+
+1. `deferReply({ ephemeral: true })` — respond privately
+2. Validate inputs (hierarchy check, target vs. moderator, etc.)
+3. Execute the Discord action (ban, kick, timeout, etc.)
+4. `createCase()` — record in `mod_cases` table
+5. `sendDmNotification()` — DM the target (if enabled in config)
+6. `sendModLogEmbed()` — post embed to the configured mod log channel
+7. `checkEscalation()` — for warn commands, check auto-escalation thresholds
+
+Duration-based commands (timeout, tempban, slowmode) use `parseDuration()` from `src/utils/duration.js`.
+
+### Database Tables
+
+| Table | Purpose |
+|-------|---------|
+| `mod_cases` | All moderation actions — warn, kick, ban, timeout, etc. One row per action per guild |
+| `mod_scheduled_actions` | Scheduled operations (tempban expiry). Polled every 60s by the tempban scheduler |
 
 ## How to Add a Module
 
@@ -145,3 +169,8 @@ After every code change, check whether these files need updating:
 4. **DATABASE_URL optional** — the bot works without a database (uses config.json only), but config persistence requires PostgreSQL
 5. **Undici override** — `pnpm.overrides` pins undici; this was originally added for Node 18 compatibility and may no longer be needed on Node 22. Verify before removing
 6. **2000-char limit** — Discord messages can't exceed 2000 characters; use `splitMessage()` utility
+7. **DM before action** — moderation commands DM the target *before* executing kicks/bans; once a user is kicked/banned they can't receive DMs from the bot
+8. **Hierarchy checks** — `checkHierarchy(moderator, target)` prevents moderating users with equal or higher roles; always call this before executing mod actions
+9. **Duration caps** — Discord timeouts max at 28 days; slowmode caps at 6 hours (21600s). Both are enforced in command logic
+10. **Tempban scheduler** — runs on a 60s interval; started in `index.js` startup and stopped in graceful shutdown. Catches up on missed unbans after restart
+11. **Case numbering** — per-guild sequential via `getNextCaseNumber(guildId)`. Uses `COALESCE(MAX(case_number), 0) + 1` pattern

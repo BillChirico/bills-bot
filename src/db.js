@@ -117,6 +117,54 @@ export async function initDb() {
         ON conversations (created_at)
       `);
 
+      // Moderation tables
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS mod_cases (
+          id SERIAL PRIMARY KEY,
+          guild_id TEXT NOT NULL,
+          case_number INTEGER NOT NULL,
+          action TEXT NOT NULL,
+          target_id TEXT NOT NULL,
+          target_tag TEXT NOT NULL,
+          moderator_id TEXT NOT NULL,
+          moderator_tag TEXT NOT NULL,
+          reason TEXT,
+          duration TEXT,
+          expires_at TIMESTAMPTZ,
+          log_message_id TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(guild_id, case_number)
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_mod_cases_guild_target
+        ON mod_cases (guild_id, target_id, created_at)
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_mod_cases_guild_case
+        ON mod_cases (guild_id, case_number)
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS mod_scheduled_actions (
+          id SERIAL PRIMARY KEY,
+          guild_id TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target_id TEXT NOT NULL,
+          case_id INTEGER REFERENCES mod_cases(id),
+          execute_at TIMESTAMPTZ NOT NULL,
+          executed BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_mod_scheduled_actions_pending
+        ON mod_scheduled_actions (executed, execute_at)
+      `);
+
       info('Database schema initialized');
     } catch (err) {
       // Clean up the pool so getPool() doesn't return an unusable instance
