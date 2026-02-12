@@ -9,12 +9,20 @@ vi.mock('../../src/logger.js', () => ({
 }));
 
 import {
-  __getCommunityActivityState,
-  __resetCommunityActivityState,
+  __welcomeDevHelpers,
   recordCommunityActivity,
   renderWelcomeMessage,
   sendWelcomeMessage,
 } from '../../src/modules/welcome.js';
+
+if (!__welcomeDevHelpers) {
+  throw new Error('Expected __welcomeDevHelpers to be available in test environment');
+}
+
+const {
+  getCommunityActivityState: __getCommunityActivityState,
+  resetCommunityActivityState: __resetCommunityActivityState,
+} = __welcomeDevHelpers;
 
 describe('renderWelcomeMessage', () => {
   it('should replace {user} with mention', () => {

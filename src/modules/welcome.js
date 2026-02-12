@@ -24,7 +24,7 @@ let excludedChannelsCache = null;
  * @param {string} guildId - Guild ID
  * @returns {Record<string, number[]>}
  */
-export function __getCommunityActivityState(guildId) {
+function getCommunityActivityState(guildId) {
   const activityMap = guildActivity.get(guildId);
   if (!activityMap) return {};
 
@@ -36,11 +36,22 @@ export function __getCommunityActivityState(guildId) {
 /**
  * Test-only helper: clear in-memory activity state.
  */
-export function __resetCommunityActivityState() {
+function resetCommunityActivityState() {
   guildActivity.clear();
   activityCallCount = 0;
   excludedChannelsCache = null;
 }
+
+/**
+ * Dev/test-only helper access. Undefined in production to avoid exposing internals.
+ */
+export const __welcomeDevHelpers =
+  process.env.NODE_ENV !== 'production'
+    ? {
+        getCommunityActivityState,
+        resetCommunityActivityState,
+      }
+    : undefined;
 
 /**
  * Render welcome message with placeholder replacements
