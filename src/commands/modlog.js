@@ -13,7 +13,7 @@ import {
   SlashCommandBuilder,
   StringSelectMenuBuilder,
 } from 'discord.js';
-import { info } from '../logger.js';
+import { info, error as logError } from '../logger.js';
 import { getConfig, setConfigValue } from '../modules/config.js';
 
 export const data = new SlashCommandBuilder()
@@ -42,6 +42,11 @@ export async function execute(interaction) {
     case 'disable':
       await handleDisable(interaction);
       break;
+    default:
+      logError('Unknown modlog subcommand', { subcommand, command: 'modlog' });
+      await interaction
+        .reply({ content: '❌ Unknown subcommand.', ephemeral: true })
+        .catch(() => {});
   }
 }
 
@@ -93,43 +98,56 @@ async function handleSetup(interaction) {
   let selectedCategory = null;
 
   collector.on('collect', async (i) => {
-    if (i.customId === 'modlog_done') {
-      await i.update({
-        components: [],
-        embeds: [embed.setDescription('✅ Mod log setup complete.')],
-      });
-      collector.stop();
-      return;
-    }
+    try {
+      if (i.customId === 'modlog_done') {
+        await i.update({
+          components: [],
+          embeds: [embed.setDescription('✅ Mod log setup complete.')],
+        });
+        collector.stop();
+        return;
+      }
 
-    if (i.customId === 'modlog_category') {
-      selectedCategory = i.values[0];
-      const channelSelect = new ChannelSelectMenuBuilder()
-        .setCustomId('modlog_channel')
-        .setPlaceholder(`Select channel for ${selectedCategory}`)
-        .setChannelTypes(ChannelType.GuildText);
-      const channelRow = new ActionRowBuilder().addComponents(channelSelect);
-      await i.update({
-        embeds: [embed.setDescription(`Select a channel for **${selectedCategory}** events.`)],
-        components: [channelRow, doneRow],
-      });
-      return;
-    }
+      if (i.customId === 'modlog_category') {
+        selectedCategory = i.values[0];
+        const channelSelect = new ChannelSelectMenuBuilder()
+          .setCustomId('modlog_channel')
+          .setPlaceholder(`Select channel for ${selectedCategory}`)
+          .setChannelTypes(ChannelType.GuildText);
+        const channelRow = new ActionRowBuilder().addComponents(channelSelect);
+        await i.update({
+          embeds: [embed.setDescription(`Select a channel for **${selectedCategory}** events.`)],
+          components: [channelRow, doneRow],
+        });
+        return;
+      }
 
-    if (i.customId === 'modlog_channel' && selectedCategory) {
-      const channelId = i.values[0];
-      await setConfigValue(`moderation.logging.channels.${selectedCategory}`, channelId);
-      info('Modlog channel configured', { category: selectedCategory, channelId });
-      await i.update({
-        embeds: [
-          embed.setDescription(
-            `✅ **${selectedCategory}** → <#${channelId}>\n\nSelect another category or click Done.`,
-          ),
-        ],
-        components: [row, doneRow],
+      if (i.customId === 'modlog_channel' && selectedCategory) {
+        const channelId = i.values[0];
+        await setConfigValue(`moderation.logging.channels.${selectedCategory}`, channelId);
+        info('Modlog channel configured', { category: selectedCategory, channelId });
+        await i.update({
+          embeds: [
+            embed.setDescription(
+              `✅ **${selectedCategory}** → <#${channelId}>\n\nSelect another category or click Done.`,
+            ),
+          ],
+          components: [row, doneRow],
+        });
+        selectedCategory = null;
+      }
+    } catch (err) {
+      logError('Modlog setup interaction failed', {
+        error: err.message,
+        customId: i.customId,
+        command: 'modlog',
       });
-      selectedCategory = null;
-      return;
+      await i
+        .reply({
+          content: '❌ Failed to update modlog configuration. Please try again.',
+          ephemeral: true,
+        })
+        .catch(() => {});
     }
   });
 
@@ -147,20 +165,27 @@ async function handleSetup(interaction) {
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  */
 async function handleView(interaction) {
-  const config = getConfig();
-  const channels = config.moderation?.logging?.channels || {};
+  try {
+    const config = getConfig();
+    const channels = config.moderation?.logging?.channels || {};
 
-  const embed = new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle('📋 Mod Log Configuration')
-    .setTimestamp();
+    const embed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle('📋 Mod Log Configuration')
+      .setTimestamp();
 
-  const lines = Object.entries(channels).map(
-    ([key, value]) => `**${key}:** ${value ? `<#${value}>` : '*Not set*'}`,
-  );
-  embed.setDescription(lines.join('\n') || 'No channels configured.');
+    const lines = Object.entries(channels).map(
+      ([key, value]) => `**${key}:** ${value ? `<#${value}>` : '*Not set*'}`,
+    );
+    embed.setDescription(lines.join('\n') || 'No channels configured.');
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+  } catch (err) {
+    logError('Modlog view failed', { error: err.message, command: 'modlog' });
+    await interaction
+      .reply({ content: '❌ Failed to load mod log configuration.', ephemeral: true })
+      .catch(() => {});
+  }
 }
 
 /**
@@ -169,12 +194,19 @@ async function handleView(interaction) {
  */
 async function handleDisable(interaction) {
   await interaction.deferReply({ ephemeral: true });
-  const keys = ['default', 'warns', 'bans', 'kicks', 'timeouts', 'purges', 'locks'];
-  for (const key of keys) {
-    await setConfigValue(`moderation.logging.channels.${key}`, 'null');
+
+  try {
+    const keys = ['default', 'warns', 'bans', 'kicks', 'timeouts', 'purges', 'locks'];
+    for (const key of keys) {
+      await setConfigValue(`moderation.logging.channels.${key}`, null);
+    }
+
+    info('Mod logging disabled', { moderator: interaction.user.tag });
+    await interaction.editReply(
+      '✅ Mod logging has been disabled. All log channels have been cleared.',
+    );
+  } catch (err) {
+    logError('Modlog disable failed', { error: err.message, command: 'modlog' });
+    await interaction.editReply('❌ Failed to disable mod logging.').catch(() => {});
   }
-  info('Mod logging disabled', { moderator: interaction.user.tag });
-  await interaction.editReply(
-    '✅ Mod logging has been disabled. All log channels have been cleared.',
-  );
 }

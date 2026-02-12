@@ -4,12 +4,12 @@
  */
 
 import { SlashCommandBuilder } from 'discord.js';
-import { getPool } from '../db.js';
 import { info, error as logError } from '../logger.js';
 import { getConfig } from '../modules/config.js';
 import {
   checkHierarchy,
   createCase,
+  scheduleAction,
   sendDmNotification,
   sendModLogEmbed,
   shouldSendDm,
@@ -42,9 +42,9 @@ export const adminOnly = true;
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  */
 export async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-
   try {
+    await interaction.deferReply({ ephemeral: true });
+
     const config = getConfig();
     const user = interaction.options.getUser('user');
     const durationStr = interaction.options.getString('duration');
@@ -92,11 +92,7 @@ export async function execute(interaction) {
       expiresAt,
     });
 
-    const pool = getPool();
-    await pool.query(
-      'INSERT INTO mod_scheduled_actions (guild_id, action, target_id, case_id, execute_at) VALUES ($1, $2, $3, $4, $5)',
-      [interaction.guild.id, 'unban', user.id, caseData.id, expiresAt],
-    );
+    await scheduleAction(interaction.guild.id, 'unban', user.id, caseData.id, expiresAt);
 
     await sendModLogEmbed(interaction.client, config, caseData);
 
@@ -111,10 +107,10 @@ export async function execute(interaction) {
   } catch (err) {
     logError('Command error', { error: err.message, command: 'tempban' });
     const content = `❌ Failed to execute: ${err.message}`;
-    if (interaction.deferred) {
-      await interaction.editReply(content);
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(content).catch(() => {});
     } else {
-      await interaction.reply({ content, ephemeral: true });
+      await interaction.reply({ content, ephemeral: true }).catch(() => {});
     }
   }
 }
