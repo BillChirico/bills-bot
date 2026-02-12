@@ -16,10 +16,7 @@ vi.mock('../../src/logger.js', () => ({ info: vi.fn(), error: vi.fn(), warn: vi.
 
 import { adminOnly, data, execute } from '../../src/commands/unlock.js';
 import { createCase, sendModLogEmbed } from '../../src/modules/moderation.js';
-import {
-  createChannelCommandInteraction,
-  createMockChannel,
-} from './helpers/channelCommand.js';
+import { createBaseLockInteraction, createMockChannel } from './helpers/channel-lock.js';
 
 describe('unlock command', () => {
   afterEach(() => {
@@ -35,7 +32,7 @@ describe('unlock command', () => {
   });
 
   it('should unlock the current channel with SendMessages reset to null', async () => {
-    const interaction = createChannelCommandInteraction();
+    const interaction = createBaseLockInteraction();
 
     await execute(interaction);
 
@@ -63,7 +60,7 @@ describe('unlock command', () => {
 
   it('should unlock a specified channel', async () => {
     const targetChannel = createMockChannel({ id: 'chan2', name: 'announcements' });
-    const interaction = createChannelCommandInteraction();
+    const interaction = createBaseLockInteraction();
     interaction.options.getChannel.mockReturnValue(targetChannel);
 
     await execute(interaction);
@@ -82,7 +79,7 @@ describe('unlock command', () => {
   });
 
   it('should include reason in notification and case', async () => {
-    const interaction = createChannelCommandInteraction();
+    const interaction = createBaseLockInteraction();
     interaction.options.getString.mockReturnValue('raid is over');
 
     await execute(interaction);
@@ -96,7 +93,7 @@ describe('unlock command', () => {
   });
 
   it('should reject non-text channels', async () => {
-    const interaction = createChannelCommandInteraction();
+    const interaction = createBaseLockInteraction();
     interaction.channel.type = ChannelType.GuildVoice;
 
     await execute(interaction);
@@ -106,7 +103,7 @@ describe('unlock command', () => {
   });
 
   it('should handle errors gracefully', async () => {
-    const interaction = createChannelCommandInteraction();
+    const interaction = createBaseLockInteraction();
     interaction.channel.permissionOverwrites.edit.mockRejectedValueOnce(new Error('Missing perms'));
 
     await execute(interaction);

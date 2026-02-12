@@ -1,17 +1,22 @@
+/**
+ * Shared test helpers for lock/unlock command tests.
+ * Reduces scaffolding duplication between lock.test.js and unlock.test.js.
+ */
+
 import { ChannelType } from 'discord.js';
 import { vi } from 'vitest';
 
 /**
- * Create a mock channel for lock/unlock tests.
- * @param {Object} overrides - Properties to override
- * @returns {Object} Mock channel
+ * Create a mock channel with overridable properties.
+ * @param {Object} overrides
+ * @returns {Object}
  */
 export function createMockChannel(overrides = {}) {
   const id = overrides.id || 'chan1';
   return {
     id,
     name: overrides.name || 'general',
-    type: overrides.type || ChannelType.GuildText,
+    type: overrides.type ?? ChannelType.GuildText,
     permissionOverwrites: { edit: vi.fn().mockResolvedValue(undefined) },
     send: vi.fn().mockResolvedValue(undefined),
     toString: () => `<#${id}>`,
@@ -20,11 +25,11 @@ export function createMockChannel(overrides = {}) {
 }
 
 /**
- * Create a mock interaction for lock/unlock channel commands.
- * @param {Object} overrides - Properties to override
- * @returns {Object} Mock interaction
+ * Create a base interaction for lock/unlock tests.
+ * @param {Object} overrides
+ * @returns {Object}
  */
-export function createChannelCommandInteraction(overrides = {}) {
+export function createBaseLockInteraction(overrides = {}) {
   return {
     options: {
       getChannel: vi.fn().mockReturnValue(null),
