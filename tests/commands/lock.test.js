@@ -16,39 +16,11 @@ vi.mock('../../src/logger.js', () => ({ info: vi.fn(), error: vi.fn(), warn: vi.
 
 import { adminOnly, data, execute } from '../../src/commands/lock.js';
 import { createCase, sendModLogEmbed } from '../../src/modules/moderation.js';
+import { createBaseLockInteraction, createMockChannel } from './helpers/channel-lock.js';
 
 describe('lock command', () => {
   afterEach(() => {
     vi.clearAllMocks();
-  });
-
-  const createMockChannel = (overrides = {}) => ({
-    id: 'chan1',
-    name: 'general',
-    type: ChannelType.GuildText,
-    permissionOverwrites: { edit: vi.fn().mockResolvedValue(undefined) },
-    send: vi.fn().mockResolvedValue(undefined),
-    toString: () => `<#${overrides.id || 'chan1'}>`,
-    ...overrides,
-  });
-
-  const createInteraction = (overrides = {}) => ({
-    options: {
-      getChannel: vi.fn().mockReturnValue(null),
-      getString: vi.fn().mockReturnValue(null),
-    },
-    channel: createMockChannel(),
-    guild: {
-      id: 'guild1',
-      roles: { everyone: { id: 'everyone-role' } },
-    },
-    user: { id: 'mod1', tag: 'Mod#0001', toString: () => '<@mod1>' },
-    client: { channels: { fetch: vi.fn() } },
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-    reply: vi.fn().mockResolvedValue(undefined),
-    deferred: true,
-    ...overrides,
   });
 
   it('should export data with name "lock"', () => {
@@ -60,7 +32,7 @@ describe('lock command', () => {
   });
 
   it('should lock the current channel when no channel option provided', async () => {
-    const interaction = createInteraction();
+    const interaction = createBaseLockInteraction();
 
     await execute(interaction);
 
@@ -86,7 +58,7 @@ describe('lock command', () => {
 
   it('should lock a specified channel', async () => {
     const targetChannel = createMockChannel({ id: 'chan2', name: 'announcements' });
-    const interaction = createInteraction();
+    const interaction = createBaseLockInteraction();
     interaction.options.getChannel.mockReturnValue(targetChannel);
 
     await execute(interaction);
@@ -105,7 +77,7 @@ describe('lock command', () => {
   });
 
   it('should include reason in notification and case', async () => {
-    const interaction = createInteraction();
+    const interaction = createBaseLockInteraction();
     interaction.options.getString.mockReturnValue('raid in progress');
 
     await execute(interaction);
@@ -122,7 +94,7 @@ describe('lock command', () => {
   });
 
   it('should reject non-text channels', async () => {
-    const interaction = createInteraction();
+    const interaction = createBaseLockInteraction();
     interaction.channel.type = ChannelType.GuildVoice;
 
     await execute(interaction);
@@ -132,7 +104,7 @@ describe('lock command', () => {
   });
 
   it('should handle errors gracefully', async () => {
-    const interaction = createInteraction();
+    const interaction = createBaseLockInteraction();
     interaction.channel.permissionOverwrites.edit.mockRejectedValueOnce(new Error('Missing perms'));
 
     await execute(interaction);

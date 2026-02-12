@@ -16,35 +16,14 @@ vi.mock('../../src/logger.js', () => ({ info: vi.fn(), error: vi.fn(), warn: vi.
 
 import { adminOnly, data, execute } from '../../src/commands/unlock.js';
 import { createCase, sendModLogEmbed } from '../../src/modules/moderation.js';
+import {
+  createChannelCommandInteraction,
+  createMockChannel,
+} from './helpers/channelCommand.js';
 
 describe('unlock command', () => {
   afterEach(() => {
     vi.clearAllMocks();
-  });
-
-  const createInteraction = (overrides = {}) => ({
-    options: {
-      getChannel: vi.fn().mockReturnValue(null),
-      getString: vi.fn().mockReturnValue(null),
-    },
-    channel: {
-      id: 'chan1',
-      name: 'general',
-      type: ChannelType.GuildText,
-      permissionOverwrites: { edit: vi.fn().mockResolvedValue(undefined) },
-      send: vi.fn().mockResolvedValue(undefined),
-    },
-    guild: {
-      id: 'guild1',
-      roles: { everyone: { id: 'everyone-role' } },
-    },
-    user: { id: 'mod1', tag: 'Mod#0001', toString: () => '<@mod1>' },
-    client: { channels: { fetch: vi.fn() } },
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-    reply: vi.fn().mockResolvedValue(undefined),
-    deferred: true,
-    ...overrides,
   });
 
   it('should export data with name "unlock"', () => {
@@ -56,7 +35,7 @@ describe('unlock command', () => {
   });
 
   it('should unlock the current channel with SendMessages reset to null', async () => {
-    const interaction = createInteraction();
+    const interaction = createChannelCommandInteraction();
 
     await execute(interaction);
 
@@ -83,14 +62,8 @@ describe('unlock command', () => {
   });
 
   it('should unlock a specified channel', async () => {
-    const targetChannel = {
-      id: 'chan2',
-      name: 'announcements',
-      type: ChannelType.GuildText,
-      permissionOverwrites: { edit: vi.fn().mockResolvedValue(undefined) },
-      send: vi.fn().mockResolvedValue(undefined),
-    };
-    const interaction = createInteraction();
+    const targetChannel = createMockChannel({ id: 'chan2', name: 'announcements' });
+    const interaction = createChannelCommandInteraction();
     interaction.options.getChannel.mockReturnValue(targetChannel);
 
     await execute(interaction);
@@ -109,7 +82,7 @@ describe('unlock command', () => {
   });
 
   it('should include reason in notification and case', async () => {
-    const interaction = createInteraction();
+    const interaction = createChannelCommandInteraction();
     interaction.options.getString.mockReturnValue('raid is over');
 
     await execute(interaction);
@@ -123,7 +96,7 @@ describe('unlock command', () => {
   });
 
   it('should reject non-text channels', async () => {
-    const interaction = createInteraction();
+    const interaction = createChannelCommandInteraction();
     interaction.channel.type = ChannelType.GuildVoice;
 
     await execute(interaction);
@@ -133,7 +106,7 @@ describe('unlock command', () => {
   });
 
   it('should handle errors gracefully', async () => {
-    const interaction = createInteraction();
+    const interaction = createChannelCommandInteraction();
     interaction.channel.permissionOverwrites.edit.mockRejectedValueOnce(new Error('Missing perms'));
 
     await execute(interaction);
