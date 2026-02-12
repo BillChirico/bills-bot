@@ -32,7 +32,31 @@
   "moderation": {
     "enabled": true,
     "alertChannelId": "1438665401243275284",
-    "autoDelete": false
+    "autoDelete": false,
+    "dmNotifications": {
+      "warn": true,
+      "timeout": true,
+      "kick": true,
+      "ban": true
+    },
+    "escalation": {
+      "enabled": false,
+      "thresholds": [
+        { "warns": 3, "withinDays": 7, "action": "timeout", "duration": "1h" },
+        { "warns": 5, "withinDays": 30, "action": "ban" }
+      ]
+    },
+    "logging": {
+      "channels": {
+        "default": null,
+        "warns": null,
+        "bans": null,
+        "kicks": null,
+        "timeouts": null,
+        "purges": null,
+        "locks": null
+      }
+    }
   },
   "logging": {
     "level": "info",
@@ -44,7 +68,22 @@
     "usePermissions": true,
     "allowedCommands": {
       "ping": "everyone",
-      "config": "admin"
+      "config": "admin",
+      "warn": "admin",
+      "kick": "admin",
+      "timeout": "admin",
+      "untimeout": "admin",
+      "ban": "admin",
+      "tempban": "admin",
+      "unban": "admin",
+      "softban": "admin",
+      "purge": "admin",
+      "case": "admin",
+      "history": "admin",
+      "lock": "admin",
+      "unlock": "admin",
+      "slowmode": "admin",
+      "modlog": "admin"
     }
   }
 }

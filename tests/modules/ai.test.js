@@ -10,8 +10,8 @@ vi.mock('../../src/modules/config.js', () => ({
   })),
 }));
 
-import { info, error as logError, warn as logWarn } from '../../src/logger.js';
 import {
+  _setPoolGetter,
   addToHistory,
   generateResponse,
   getConversationHistory,
@@ -21,7 +21,6 @@ import {
   setPool,
   startConversationCleanup,
   stopConversationCleanup,
-  _setPoolGetter,
 } from '../../src/modules/ai.js';
 import { getConfig } from '../../src/modules/config.js';
 
@@ -116,10 +115,10 @@ describe('ai module', () => {
       // After reversing, oldest comes first
       expect(history[0].content).toBe('from db');
       expect(history[1].content).toBe('response');
-      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('SELECT role, content FROM conversations'), [
-        'ch-new',
-        20,
-      ]);
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT role, content FROM conversations'),
+        ['ch-new', 20],
+      );
     });
   });
 
@@ -236,7 +235,10 @@ describe('ai module', () => {
       startConversationCleanup();
 
       await vi.waitFor(() => {
-        expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM conversations'), [30]);
+        expect(mockQuery).toHaveBeenCalledWith(
+          expect.stringContaining('DELETE FROM conversations'),
+          [30],
+        );
       });
 
       stopConversationCleanup();
