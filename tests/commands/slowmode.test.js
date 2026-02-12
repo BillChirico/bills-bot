@@ -133,7 +133,7 @@ describe('slowmode command', () => {
     const interaction = createInteraction('1m');
     interaction.channel.setRateLimitPerUser = vi
       .fn()
-      .mockRejectedValue(new Error('Missing permissions'));
+      .mockRejectedValueOnce(new Error('Missing permissions'));
     await execute(interaction);
 
     expect(interaction.editReply).toHaveBeenCalledWith(

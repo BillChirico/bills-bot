@@ -22,18 +22,22 @@ describe('lock command', () => {
     vi.clearAllMocks();
   });
 
+  const createMockChannel = (overrides = {}) => ({
+    id: 'chan1',
+    name: 'general',
+    type: ChannelType.GuildText,
+    permissionOverwrites: { edit: vi.fn().mockResolvedValue(undefined) },
+    send: vi.fn().mockResolvedValue(undefined),
+    toString: () => `<#${overrides.id || 'chan1'}>`,
+    ...overrides,
+  });
+
   const createInteraction = (overrides = {}) => ({
     options: {
       getChannel: vi.fn().mockReturnValue(null),
       getString: vi.fn().mockReturnValue(null),
     },
-    channel: {
-      id: 'chan1',
-      name: 'general',
-      type: ChannelType.GuildText,
-      permissionOverwrites: { edit: vi.fn().mockResolvedValue(undefined) },
-      send: vi.fn().mockResolvedValue(undefined),
-    },
+    channel: createMockChannel(),
     guild: {
       id: 'guild1',
       roles: { everyone: { id: 'everyone-role' } },
@@ -81,13 +85,7 @@ describe('lock command', () => {
   });
 
   it('should lock a specified channel', async () => {
-    const targetChannel = {
-      id: 'chan2',
-      name: 'announcements',
-      type: ChannelType.GuildText,
-      permissionOverwrites: { edit: vi.fn().mockResolvedValue(undefined) },
-      send: vi.fn().mockResolvedValue(undefined),
-    };
+    const targetChannel = createMockChannel({ id: 'chan2', name: 'announcements' });
     const interaction = createInteraction();
     interaction.options.getChannel.mockReturnValue(targetChannel);
 

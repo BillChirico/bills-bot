@@ -54,7 +54,7 @@ export async function execute(interaction) {
 
     info('User unbanned', { target: userId, moderator: interaction.user.tag });
     await interaction.editReply(
-      `✅ **${userId}** has been unbanned. (Case #${caseData.case_number})`,
+      `✅ **${targetTag}** has been unbanned. (Case #${caseData.case_number})`,
     );
   } catch (err) {
     logError('Command error', { error: err.message, command: 'unban' });

@@ -12,7 +12,7 @@ vi.mock('../../src/modules/moderation.js', () => ({
 vi.mock('../../src/modules/config.js', () => ({
   getConfig: vi.fn().mockReturnValue({
     moderation: {
-      dmNotifications: { warn: true, kick: true, timeout: true, ban: true },
+      dmNotifications: { warn: true, kick: true, timeout: true, ban: true, tempban: true },
       logging: { channels: { default: '123' } },
     },
   }),
@@ -140,5 +140,6 @@ describe('tempban command', () => {
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.stringContaining('An error occurred'),
     );
+    expect(interaction.editReply).not.toHaveBeenCalledWith(expect.stringContaining('DB error'));
   });
 });

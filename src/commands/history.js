@@ -68,7 +68,7 @@ export async function execute(interaction) {
       caseCount: rows.length,
     });
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] }).catch(() => {});
   } catch (err) {
     logError('Command error', { error: err.message, command: 'history' });
     await interaction.editReply('❌ Failed to fetch moderation history.');

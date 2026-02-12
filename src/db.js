@@ -157,6 +157,7 @@ export async function initDb() {
       await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_mod_scheduled_actions_pending
         ON mod_scheduled_actions (executed, execute_at)
+        WHERE executed = FALSE
       `);
 
       info('Database schema initialized');

@@ -73,7 +73,7 @@ export async function execute(interaction) {
         return await interaction.editReply(hierarchyError);
       }
 
-      if (shouldSendDm(config, 'ban')) {
+      if (shouldSendDm(config, 'tempban')) {
         await sendDmNotification(member, 'tempban', reason, interaction.guild.name);
       }
     }

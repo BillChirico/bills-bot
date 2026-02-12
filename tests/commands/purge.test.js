@@ -169,6 +169,7 @@ describe('purge command', () => {
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
+      expect(bulkDeleteCall.values().next().value.content).toBe('bot message');
     });
 
     it('should filter by text with "contains" subcommand', async () => {
@@ -182,6 +183,7 @@ describe('purge command', () => {
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
+      expect(bulkDeleteCall.values().next().value.content).toBe('this has TEST word');
     });
 
     it('should filter links with "links" subcommand', async () => {
@@ -195,6 +197,7 @@ describe('purge command', () => {
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
+      expect(bulkDeleteCall.values().next().value.content).toBe('check https://example.com');
     });
 
     it('should filter attachments with "attachments" subcommand', async () => {
@@ -208,6 +211,7 @@ describe('purge command', () => {
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
+      expect(bulkDeleteCall.values().next().value.content).toBe('has file');
     });
 
     it('should filter out messages older than 14 days', async () => {
@@ -222,6 +226,7 @@ describe('purge command', () => {
 
       const bulkDeleteCall = interaction.channel.bulkDelete.mock.calls[0][0];
       expect(bulkDeleteCall.size).toBe(1);
+      expect(bulkDeleteCall.values().next().value.content).toBe('recent');
     });
 
     it('should create a case and send shared mod log embed on success', async () => {

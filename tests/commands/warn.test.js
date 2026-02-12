@@ -99,6 +99,15 @@ describe('warn command', () => {
     expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('has been warned'));
   });
 
+  it('should reject when target is not in server', async () => {
+    const interaction = createInteraction();
+    interaction.options.getMember.mockReturnValue(null);
+
+    await execute(interaction);
+
+    expect(interaction.editReply).toHaveBeenCalledWith('❌ User is not in this server.');
+  });
+
   it('should reject when hierarchy check fails', async () => {
     checkHierarchy.mockReturnValueOnce(
       '❌ You cannot moderate a member with an equal or higher role than yours.',

@@ -63,29 +63,38 @@ export async function execute(interaction) {
     await channel.setRateLimitPerUser(seconds);
 
     const config = getConfig();
-    const caseData = await createCase(interaction.guild.id, {
-      action: 'slowmode',
-      targetId: channel.id,
-      targetTag: `#${channel.name}`,
-      moderatorId: interaction.user.id,
-      moderatorTag: interaction.user.tag,
-      reason:
-        reason ||
-        (seconds === 0 ? 'Slowmode disabled' : `Slowmode set to ${formatDuration(seconds * 1000)}`),
-      duration: seconds > 0 ? formatDuration(seconds * 1000) : null,
-    });
+    try {
+      const caseData = await createCase(interaction.guild.id, {
+        action: 'slowmode',
+        targetId: channel.id,
+        targetTag: `#${channel.name}`,
+        moderatorId: interaction.user.id,
+        moderatorTag: interaction.user.tag,
+        reason:
+          reason ||
+          (seconds === 0
+            ? 'Slowmode disabled'
+            : `Slowmode set to ${formatDuration(seconds * 1000)}`),
+        duration: seconds > 0 ? formatDuration(seconds * 1000) : null,
+      });
 
-    await sendModLogEmbed(interaction.client, config, caseData);
+      await sendModLogEmbed(interaction.client, config, caseData);
 
-    if (seconds === 0) {
-      info('Slowmode disabled', { channelId: channel.id, moderator: interaction.user.tag });
+      if (seconds === 0) {
+        info('Slowmode disabled', { channelId: channel.id, moderator: interaction.user.tag });
+        await interaction.editReply(
+          `✅ Slowmode disabled in ${channel}. (Case #${caseData.case_number})`,
+        );
+      } else {
+        info('Slowmode set', { channelId: channel.id, seconds, moderator: interaction.user.tag });
+        await interaction.editReply(
+          `✅ Slowmode set to **${formatDuration(seconds * 1000)}** in ${channel}. (Case #${caseData.case_number})`,
+        );
+      }
+    } catch (err) {
+      logError('Failed to create case for slowmode', { error: err.message });
       await interaction.editReply(
-        `✅ Slowmode disabled in ${channel}. (Case #${caseData.case_number})`,
-      );
-    } else {
-      info('Slowmode set', { channelId: channel.id, seconds, moderator: interaction.user.tag });
-      await interaction.editReply(
-        `✅ Slowmode set to **${formatDuration(seconds * 1000)}** in ${channel}. (Case #${caseData.case_number})`,
+        `✅ Slowmode ${seconds === 0 ? 'disabled' : `set to **${formatDuration(seconds * 1000)}**`}, but failed to log case.`,
       );
     }
   } catch (err) {

@@ -287,15 +287,20 @@ export async function checkEscalation(
 
   const pool = getPool();
 
-  for (const threshold of thresholds) {
-    const { rows } = await pool.query(
-      `SELECT COUNT(*)::integer AS count FROM mod_cases
-       WHERE guild_id = $1 AND target_id = $2 AND action = 'warn'
-       AND created_at > NOW() - INTERVAL '1 day' * $3`,
-      [guildId, targetId, threshold.withinDays],
-    );
+  const maxDays = Math.max(...thresholds.map((t) => t.withinDays));
+  const { rows } = await pool.query(
+    `SELECT created_at FROM mod_cases
+     WHERE guild_id = $1 AND target_id = $2 AND action = 'warn'
+     AND created_at > NOW() - INTERVAL '1 day' * $3`,
+    [guildId, targetId, maxDays],
+  );
 
-    const warnCount = rows[0]?.count || 0;
+  const allWarns = rows.map((r) => new Date(r.created_at).getTime());
+
+  for (const threshold of thresholds) {
+    const cutoff = Date.now() - threshold.withinDays * 86400000;
+    const warnCount = allWarns.filter((ts) => ts > cutoff).length;
+
     if (warnCount < threshold.warns) continue;
 
     const reason = `Auto-escalation: ${warnCount} warns in ${threshold.withinDays} days`;
@@ -305,7 +310,8 @@ export async function checkEscalation(
       const guild = await client.guilds.fetch(guildId);
       const member = await guild.members.fetch(targetId).catch(() => null);
 
-      if (threshold.action === 'timeout' && member) {
+      if (threshold.action === 'timeout') {
+        if (!member) continue;
         const ms = parseDuration(threshold.duration);
         if (ms) {
           await member.timeout(ms, reason);

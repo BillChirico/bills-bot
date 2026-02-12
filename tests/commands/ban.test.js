@@ -27,41 +27,43 @@ describe('ban command', () => {
     vi.clearAllMocks();
   });
 
-  const mockUser = { id: 'user1', tag: 'User#0001' };
-  const mockMember = {
-    id: 'user1',
-    user: mockUser,
-    roles: { highest: { position: 5 } },
-  };
+  const createInteraction = () => {
+    const mockUser = { id: 'user1', tag: 'User#0001' };
+    const mockMember = {
+      id: 'user1',
+      user: mockUser,
+      roles: { highest: { position: 5 } },
+    };
 
-  const createInteraction = () => ({
-    options: {
-      getUser: vi.fn().mockReturnValue(mockUser),
-      getString: vi.fn().mockImplementation((name) => {
-        if (name === 'reason') return 'test reason';
-        return null;
-      }),
-      getInteger: vi.fn().mockReturnValue(0),
-    },
-    guild: {
-      id: 'guild1',
-      name: 'Test Server',
-      members: {
-        ban: vi.fn().mockResolvedValue(undefined),
-        fetch: vi.fn().mockResolvedValue(mockMember),
-        me: {
-          roles: { highest: { position: 10 } },
+    return {
+      options: {
+        getUser: vi.fn().mockReturnValue(mockUser),
+        getString: vi.fn().mockImplementation((name) => {
+          if (name === 'reason') return 'test reason';
+          return null;
+        }),
+        getInteger: vi.fn().mockReturnValue(0),
+      },
+      guild: {
+        id: 'guild1',
+        name: 'Test Server',
+        members: {
+          ban: vi.fn().mockResolvedValue(undefined),
+          fetch: vi.fn().mockResolvedValue(mockMember),
+          me: {
+            roles: { highest: { position: 10 } },
+          },
         },
       },
-    },
-    member: { roles: { highest: { position: 10 } } },
-    user: { id: 'mod1', tag: 'Mod#0001' },
-    client: { user: { id: 'bot1', tag: 'Bot#0001' } },
-    deferReply: vi.fn().mockResolvedValue(undefined),
-    editReply: vi.fn().mockResolvedValue(undefined),
-    reply: vi.fn().mockResolvedValue(undefined),
-    deferred: true,
-  });
+      member: { roles: { highest: { position: 10 } } },
+      user: { id: 'mod1', tag: 'Mod#0001' },
+      client: { user: { id: 'bot1', tag: 'Bot#0001' } },
+      deferReply: vi.fn().mockResolvedValue(undefined),
+      editReply: vi.fn().mockResolvedValue(undefined),
+      reply: vi.fn().mockResolvedValue(undefined),
+      deferred: true,
+    };
+  };
 
   it('should export data with name "ban"', () => {
     expect(data.name).toBe('ban');

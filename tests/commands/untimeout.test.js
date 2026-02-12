@@ -18,7 +18,7 @@ vi.mock('../../src/modules/config.js', () => ({
 vi.mock('../../src/logger.js', () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }));
 
 import { adminOnly, data, execute } from '../../src/commands/untimeout.js';
-import { checkHierarchy, createCase } from '../../src/modules/moderation.js';
+import { checkHierarchy, createCase, sendModLogEmbed } from '../../src/modules/moderation.js';
 
 describe('untimeout command', () => {
   afterEach(() => {
@@ -84,6 +84,7 @@ describe('untimeout command', () => {
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.stringContaining('has had their timeout removed'),
     );
+    expect(sendModLogEmbed).toHaveBeenCalled();
   });
 
   it('should reject when hierarchy check fails', async () => {

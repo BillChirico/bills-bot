@@ -99,6 +99,15 @@ describe('kick command', () => {
     expect(mockMember.kick).not.toHaveBeenCalled();
   });
 
+  it('should reject when target is not in server', async () => {
+    const { interaction } = createInteraction();
+    interaction.options.getMember.mockReturnValue(null);
+
+    await execute(interaction);
+
+    expect(interaction.editReply).toHaveBeenCalledWith('❌ User is not in this server.');
+  });
+
   it('should handle errors gracefully', async () => {
     createCase.mockRejectedValueOnce(new Error('DB error'));
     const { interaction } = createInteraction();

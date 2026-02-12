@@ -400,7 +400,9 @@ describe('moderation module', () => {
 
       // warn count query, then log_message_id update from sendModLogEmbed
       mockPool.query
-        .mockResolvedValueOnce({ rows: [{ count: 3 }] })
+        .mockResolvedValueOnce({
+          rows: new Array(3).fill({ created_at: new Date().toISOString() }),
+        })
         .mockResolvedValueOnce({ rows: [] });
 
       // createCase transaction queries
@@ -464,7 +466,9 @@ describe('moderation module', () => {
       };
 
       mockPool.query
-        .mockResolvedValueOnce({ rows: [{ count: 5 }] })
+        .mockResolvedValueOnce({
+          rows: new Array(5).fill({ created_at: new Date().toISOString() }),
+        })
         .mockResolvedValueOnce({ rows: [] });
 
       mockConnection.query
