@@ -288,18 +288,28 @@ export async function checkEscalation(
   const pool = getPool();
 
   const maxDays = Math.max(...thresholds.map((t) => t.withinDays));
+
+  // Build a single query that computes per-threshold warn counts in one pass
+  const selectCols = thresholds
+    .map(
+      (t, i) =>
+        `COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '1 day' * $${i + 3}) AS c${i}`,
+    )
+    .join(', ');
+
   const { rows } = await pool.query(
-    `SELECT created_at FROM mod_cases
+    `SELECT ${selectCols}
+     FROM mod_cases
      WHERE guild_id = $1 AND target_id = $2 AND action = 'warn'
-     AND created_at > NOW() - INTERVAL '1 day' * $3`,
-    [guildId, targetId, maxDays],
+     AND created_at > NOW() - INTERVAL '1 day' * $${thresholds.length + 3}`,
+    [guildId, targetId, ...thresholds.map((t) => t.withinDays), maxDays],
   );
 
-  const allWarns = rows.map((r) => new Date(r.created_at).getTime());
+  const counts = rows[0];
 
-  for (const threshold of thresholds) {
-    const cutoff = Date.now() - threshold.withinDays * 86400000;
-    const warnCount = allWarns.filter((ts) => ts > cutoff).length;
+  for (let i = 0; i < thresholds.length; i++) {
+    const threshold = thresholds[i];
+    const warnCount = Number(counts[`c${i}`]);
 
     if (warnCount < threshold.warns) continue;
 
