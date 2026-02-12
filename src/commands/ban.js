@@ -58,6 +58,13 @@ export async function execute(interaction) {
         return await interaction.editReply(hierarchyError);
       }
 
+      const botMember = interaction.guild.members.me;
+      if (botMember && member.roles.highest.position >= botMember.roles.highest.position) {
+        return await interaction.editReply(
+          '❌ I cannot ban this member because my role is not high enough.',
+        );
+      }
+
       if (shouldSendDm(config, 'ban')) {
         await sendDmNotification(member, 'ban', reason, interaction.guild.name);
       }
@@ -85,11 +92,21 @@ export async function execute(interaction) {
     );
   } catch (err) {
     logError('Command error', { error: err.message, command: 'ban' });
-    const content = `❌ Failed to execute: ${err.message}`;
-    if (interaction.deferred) {
-      await interaction.editReply(content);
-    } else {
-      await interaction.reply({ content, ephemeral: true });
+
+    const lower = err.message?.toLowerCase() || '';
+    const content =
+      lower.includes('missing permissions') || lower.includes('missing access')
+        ? '❌ I do not have permission to ban that user.'
+        : `❌ Failed to execute: ${err.message}`;
+
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(content);
+      } else {
+        await interaction.reply({ content, ephemeral: true });
+      }
+    } catch {
+      // Interaction expired/already handled
     }
   }
 }

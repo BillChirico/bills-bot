@@ -53,7 +53,7 @@ export async function execute(interaction) {
       return await interaction.editReply(hierarchyError);
     }
 
-    if (shouldSendDm(config, 'ban')) {
+    if (shouldSendDm(config, 'softban')) {
       await sendDmNotification(target, 'softban', reason, interaction.guild.name);
     }
 
@@ -62,7 +62,31 @@ export async function execute(interaction) {
       reason: reason || undefined,
     });
 
-    await interaction.guild.members.unban(target.id, 'Softban');
+    let unbanError = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await interaction.guild.members.unban(target.id, 'Softban');
+        unbanError = null;
+        break;
+      } catch (err) {
+        unbanError = err;
+        logError('Softban unban attempt failed', {
+          error: err.message,
+          targetId: target.id,
+          attempt,
+          command: 'softban',
+        });
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+        }
+      }
+    }
+
+    if (unbanError) {
+      throw new Error(
+        'Softban unban step failed after multiple attempts. The user may still be banned.',
+      );
+    }
 
     const caseData = await createCase(interaction.guild.id, {
       action: 'softban',

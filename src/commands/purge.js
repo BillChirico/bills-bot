@@ -3,9 +3,10 @@
  * Bulk delete messages with filtering subcommands
  */
 
-import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { info, error as logError } from '../logger.js';
 import { getConfig } from '../modules/config.js';
+import { createCase, sendModLogEmbed } from '../modules/moderation.js';
 
 export const data = new SlashCommandBuilder()
   .setName('purge')
@@ -17,7 +18,7 @@ export const data = new SlashCommandBuilder()
       .addIntegerOption((opt) =>
         opt
           .setName('count')
-          .setDescription('Number of messages (1-100)')
+          .setDescription('Number of recent messages to scan (1-100)')
           .setRequired(true)
           .setMinValue(1)
           .setMaxValue(100),
@@ -31,7 +32,7 @@ export const data = new SlashCommandBuilder()
       .addIntegerOption((opt) =>
         opt
           .setName('count')
-          .setDescription('Number of messages to scan (1-100)')
+          .setDescription('Messages to scan (1-100, deletions may be fewer after filtering)')
           .setRequired(true)
           .setMinValue(1)
           .setMaxValue(100),
@@ -44,7 +45,7 @@ export const data = new SlashCommandBuilder()
       .addIntegerOption((opt) =>
         opt
           .setName('count')
-          .setDescription('Number of messages to scan (1-100)')
+          .setDescription('Messages to scan (1-100, deletions may be fewer after filtering)')
           .setRequired(true)
           .setMinValue(1)
           .setMaxValue(100),
@@ -60,7 +61,7 @@ export const data = new SlashCommandBuilder()
       .addIntegerOption((opt) =>
         opt
           .setName('count')
-          .setDescription('Number of messages to scan (1-100)')
+          .setDescription('Messages to scan (1-100, deletions may be fewer after filtering)')
           .setRequired(true)
           .setMinValue(1)
           .setMaxValue(100),
@@ -73,7 +74,7 @@ export const data = new SlashCommandBuilder()
       .addIntegerOption((opt) =>
         opt
           .setName('count')
-          .setDescription('Number of messages to scan (1-100)')
+          .setDescription('Messages to scan (1-100, deletions may be fewer after filtering)')
           .setRequired(true)
           .setMinValue(1)
           .setMaxValue(100),
@@ -86,7 +87,7 @@ export const data = new SlashCommandBuilder()
       .addIntegerOption((opt) =>
         opt
           .setName('count')
-          .setDescription('Number of messages to scan (1-100)')
+          .setDescription('Messages to scan (1-100, deletions may be fewer after filtering)')
           .setRequired(true)
           .setMinValue(1)
           .setMaxValue(100),
@@ -113,10 +114,13 @@ export async function execute(interaction) {
     const fourteenDaysAgo = Date.now() - 14 * 86400 * 1000;
     let filtered = fetched.filter((m) => m.createdTimestamp > fourteenDaysAgo);
 
+    let filterDetail = subcommand;
+
     switch (subcommand) {
       case 'user': {
         const user = interaction.options.getUser('user');
         filtered = filtered.filter((m) => m.author.id === user.id);
+        filterDetail = `user:${user.id}`;
         break;
       }
       case 'bot':
@@ -125,6 +129,7 @@ export async function execute(interaction) {
       case 'contains': {
         const text = interaction.options.getString('text').toLowerCase();
         filtered = filtered.filter((m) => m.content.toLowerCase().includes(text));
+        filterDetail = `contains:${text}`;
         break;
       }
       case 'links':
@@ -144,41 +149,24 @@ export async function execute(interaction) {
       moderator: interaction.user.tag,
       subcommand,
       deleted: deleted.size,
+      scanned: fetched.size,
     });
 
-    // Send mod log embed for the purge action
-    try {
-      const config = getConfig();
-      const channels = config.moderation?.logging?.channels;
-      if (channels) {
-        const channelId = channels.purges || channels.default;
-        if (channelId) {
-          const logChannel = await interaction.client.channels.fetch(channelId).catch(() => null);
-          if (logChannel) {
-            const embed = new EmbedBuilder()
-              .setColor(0x5865f2)
-              .setTitle(`Purge — ${subcommand.toUpperCase()}`)
-              .addFields(
-                { name: 'Channel', value: `<#${channel.id}>`, inline: true },
-                {
-                  name: 'Moderator',
-                  value: `<@${interaction.user.id}> (${interaction.user.tag})`,
-                  inline: true,
-                },
-                { name: 'Deleted', value: `${deleted.size} message(s)`, inline: true },
-                { name: 'Filter', value: subcommand === 'all' ? 'None' : subcommand },
-              )
-              .setTimestamp();
+    const config = getConfig();
+    const caseData = await createCase(interaction.guild.id, {
+      action: 'purge',
+      targetId: channel.id,
+      targetTag: `#${channel.name}`,
+      moderatorId: interaction.user.id,
+      moderatorTag: interaction.user.tag,
+      reason: `${deleted.size} message(s) deleted | filter=${filterDetail} | scanned=${fetched.size}`,
+    });
 
-            await logChannel.send({ embeds: [embed] });
-          }
-        }
-      }
-    } catch (err) {
-      logError('Failed to send purge log', { error: err.message });
-    }
+    await sendModLogEmbed(interaction.client, config, caseData);
 
-    await interaction.editReply(`Deleted **${deleted.size}** message(s).`);
+    await interaction.editReply(
+      `Deleted **${deleted.size}** message(s) from **${fetched.size}** scanned message(s).`,
+    );
   } catch (err) {
     logError('Purge command failed', { error: err.message, subcommand });
     await interaction.editReply(

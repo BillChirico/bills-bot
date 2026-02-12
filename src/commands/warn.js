@@ -75,7 +75,7 @@ export async function execute(interaction) {
     );
   } catch (err) {
     logError('Command error', { error: err.message, command: 'warn' });
-    const content = `❌ Failed to execute: ${err.message}`;
+    const content = '❌ Failed to execute command. Please contact an administrator.';
     if (interaction.deferred) {
       await interaction.editReply(content);
     } else {
