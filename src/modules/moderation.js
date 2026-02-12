@@ -335,6 +335,8 @@ export async function checkEscalation(
         await member.timeout(ms, reason);
       } else if (threshold.action === 'ban') {
         await guild.members.ban(targetId, { reason });
+      } else {
+        continue;
       }
 
       const escalationCase = await createCase(guildId, {

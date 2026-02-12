@@ -100,6 +100,8 @@ describe('history command', () => {
     const interaction = createInteraction();
     await execute(interaction);
 
-    expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch'));
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.stringContaining('An error occurred'),
+    );
   });
 });

@@ -71,6 +71,8 @@ export async function execute(interaction) {
     await interaction.editReply({ embeds: [embed] }).catch(() => {});
   } catch (err) {
     logError('Command error', { error: err.message, command: 'history' });
-    await interaction.editReply('❌ Failed to fetch moderation history.').catch(() => {});
+    await interaction
+      .editReply('❌ An error occurred. Please try again or contact an administrator.')
+      .catch(() => {});
   }
 }
