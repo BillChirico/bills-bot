@@ -49,6 +49,11 @@ export async function execute(interaction) {
       return await interaction.editReply('❌ Invalid duration format. Use e.g. 30m, 1h, 7d.');
     }
 
+    const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000;
+    if (durationMs > MAX_TIMEOUT_MS) {
+      return await interaction.editReply('❌ Timeout duration cannot exceed 28 days.');
+    }
+
     const hierarchyError = checkHierarchy(interaction.member, target);
     if (hierarchyError) {
       return await interaction.editReply(hierarchyError);

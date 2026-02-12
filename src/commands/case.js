@@ -7,21 +7,7 @@ import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
 import { getPool } from '../db.js';
 import { info, error as logError } from '../logger.js';
 import { getConfig } from '../modules/config.js';
-
-/**
- * Color map for case embeds by action type.
- * @type {Record<string, number>}
- */
-const ACTION_COLORS = {
-  warn: 0xfee75c,
-  kick: 0xed4245,
-  timeout: 0xe67e22,
-  untimeout: 0x57f287,
-  ban: 0xed4245,
-  tempban: 0xed4245,
-  unban: 0x57f287,
-  softban: 0xed4245,
-};
+import { ACTION_COLORS, ACTION_LOG_CHANNEL_KEY } from '../modules/moderation.js';
 
 export const data = new SlashCommandBuilder()
   .setName('case')
@@ -50,10 +36,15 @@ export const data = new SlashCommandBuilder()
             { name: 'warn', value: 'warn' },
             { name: 'kick', value: 'kick' },
             { name: 'timeout', value: 'timeout' },
+            { name: 'untimeout', value: 'untimeout' },
             { name: 'ban', value: 'ban' },
             { name: 'tempban', value: 'tempban' },
             { name: 'unban', value: 'unban' },
             { name: 'softban', value: 'softban' },
+            { name: 'lock', value: 'lock' },
+            { name: 'unlock', value: 'unlock' },
+            { name: 'purge', value: 'purge' },
+            { name: 'slowmode', value: 'slowmode' },
           ),
       ),
   )
@@ -230,16 +221,7 @@ async function handleReason(interaction) {
       const config = getConfig();
       const channels = config.moderation?.logging?.channels;
       if (channels) {
-        const channelKey = {
-          warn: 'warns',
-          kick: 'kicks',
-          timeout: 'timeouts',
-          untimeout: 'timeouts',
-          ban: 'bans',
-          tempban: 'bans',
-          unban: 'bans',
-          softban: 'bans',
-        }[caseRow.action];
+        const channelKey = ACTION_LOG_CHANNEL_KEY[caseRow.action];
         const logChannelId = channels[channelKey] || channels.default;
         if (logChannelId) {
           const logChannel = await interaction.client.channels

@@ -3,7 +3,7 @@
  * Unlock a channel to restore messaging permissions
  */
 
-import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
+import { ChannelType, EmbedBuilder, SlashCommandBuilder } from 'discord.js';
 import { info, error as logError } from '../logger.js';
 import { getConfig } from '../modules/config.js';
 import { createCase, sendModLogEmbed } from '../modules/moderation.js';
@@ -15,6 +15,7 @@ export const data = new SlashCommandBuilder()
     opt
       .setName('channel')
       .setDescription('Channel to unlock (defaults to current)')
+      .addChannelTypes(ChannelType.GuildText)
       .setRequired(false),
   )
   .addStringOption((opt) =>
@@ -28,11 +29,16 @@ export const adminOnly = true;
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  */
 export async function execute(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-  const channel = interaction.options.getChannel('channel') || interaction.channel;
-  const reason = interaction.options.getString('reason');
-
   try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const channel = interaction.options.getChannel('channel') || interaction.channel;
+    const reason = interaction.options.getString('reason');
+
+    if (channel.type !== ChannelType.GuildText) {
+      return await interaction.editReply('❌ Unlock can only be used in text channels.');
+    }
+
     await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
       SendMessages: null,
     });
@@ -59,7 +65,14 @@ export async function execute(interaction) {
     info('Channel unlocked', { channelId: channel.id, moderator: interaction.user.tag });
     await interaction.editReply(`✅ ${channel} has been unlocked.`);
   } catch (err) {
-    logError('Unlock command failed', { error: err.message });
-    await interaction.editReply(`❌ Failed to unlock channel: ${err.message}`);
+    logError('Unlock command failed', { error: err.message, command: 'unlock' });
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(`❌ Failed to unlock channel: ${err.message}`).catch(() => {});
+    } else {
+      await interaction
+        .reply({ content: `❌ Failed to unlock channel: ${err.message}`, ephemeral: true })
+        .catch(() => {});
+    }
   }
 }

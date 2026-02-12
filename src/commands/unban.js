@@ -34,10 +34,18 @@ export async function execute(interaction) {
 
     await interaction.guild.members.unban(userId, reason || undefined);
 
+    let targetTag = userId;
+    try {
+      const fetchedUser = await interaction.client.users.fetch(userId);
+      targetTag = fetchedUser.tag;
+    } catch {
+      // User no longer resolvable — keep raw ID
+    }
+
     const caseData = await createCase(interaction.guild.id, {
       action: 'unban',
       targetId: userId,
-      targetTag: userId,
+      targetTag,
       moderatorId: interaction.user.id,
       moderatorTag: interaction.user.tag,
       reason,

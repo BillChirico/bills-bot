@@ -22,9 +22,9 @@ export async function execute(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   const user = interaction.options.getUser('user');
-  const pool = getPool();
 
   try {
+    const pool = getPool();
     const { rows } = await pool.query(
       'SELECT * FROM mod_cases WHERE guild_id = $1 AND target_id = $2 ORDER BY created_at DESC LIMIT 25',
       [interaction.guild.id, user.id],
