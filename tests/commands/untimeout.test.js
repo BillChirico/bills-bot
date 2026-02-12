@@ -84,7 +84,11 @@ describe('untimeout command', () => {
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.stringContaining('has had their timeout removed'),
     );
-    expect(sendModLogEmbed).toHaveBeenCalled();
+    expect(sendModLogEmbed).toHaveBeenCalledWith(
+      interaction.client,
+      expect.any(Object),
+      expect.objectContaining({ case_number: 1, action: 'untimeout' }),
+    );
   });
 
   it('should reject when hierarchy check fails', async () => {
