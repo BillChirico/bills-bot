@@ -70,7 +70,7 @@ describe('db module', () => {
   afterEach(async () => {
     try {
       await dbModule.closeDb();
-    } catch (err) {
+    } catch {
       // ignore cleanup failures
     }
 
@@ -106,6 +106,15 @@ describe('db module', () => {
       );
       expect(queries.some((q) => q.includes('idx_conversations_channel_created'))).toBe(true);
       expect(queries.some((q) => q.includes('idx_conversations_created_at'))).toBe(true);
+
+      // Moderation tables
+      expect(queries.some((q) => q.includes('CREATE TABLE IF NOT EXISTS mod_cases'))).toBe(true);
+      expect(
+        queries.some((q) => q.includes('CREATE TABLE IF NOT EXISTS mod_scheduled_actions')),
+      ).toBe(true);
+      expect(queries.some((q) => q.includes('idx_mod_cases_guild_target'))).toBe(true);
+      expect(queries.some((q) => q.includes('idx_mod_cases_guild_case'))).toBe(true);
+      expect(queries.some((q) => q.includes('idx_mod_scheduled_actions_pending'))).toBe(true);
     });
 
     it('should return existing pool on second call', async () => {

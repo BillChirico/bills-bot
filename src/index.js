@@ -28,6 +28,7 @@ import {
 } from './modules/ai.js';
 import { loadConfig } from './modules/config.js';
 import { registerEventHandlers } from './modules/events.js';
+import { startTempbanScheduler, stopTempbanScheduler } from './modules/moderation.js';
 import { HealthMonitor } from './utils/health.js';
 import { loadCommandsFromDirectory } from './utils/loadCommands.js';
 import { getPermissionError, hasPermission } from './utils/permissions.js';
@@ -241,8 +242,9 @@ async function gracefulShutdown(signal) {
     }
   }
 
-  // 2. Stop conversation cleanup timer
+  // 2. Stop conversation cleanup timer and tempban scheduler
   stopConversationCleanup();
+  stopTempbanScheduler();
 
   // 3. Save state after pending requests complete
   info('Saving conversation state');
@@ -333,6 +335,9 @@ async function startup() {
 
   // Register event handlers with live config reference
   registerEventHandlers(client, config, healthMonitor);
+
+  // Start tempban scheduler for automatic unbans
+  startTempbanScheduler(client);
 
   // Load commands and login
   await loadCommands();

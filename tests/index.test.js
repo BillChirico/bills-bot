@@ -42,6 +42,11 @@ const mocks = vi.hoisted(() => ({
     registerEventHandlers: vi.fn(),
   },
 
+  moderation: {
+    startTempbanScheduler: vi.fn(),
+    stopTempbanScheduler: vi.fn(),
+  },
+
   health: {
     instance: {},
     getInstance: vi.fn(),
@@ -137,6 +142,11 @@ vi.mock('../src/modules/events.js', () => ({
   registerEventHandlers: mocks.events.registerEventHandlers,
 }));
 
+vi.mock('../src/modules/moderation.js', () => ({
+  startTempbanScheduler: mocks.moderation.startTempbanScheduler,
+  stopTempbanScheduler: mocks.moderation.stopTempbanScheduler,
+}));
+
 vi.mock('../src/utils/health.js', () => ({
   HealthMonitor: {
     getInstance: mocks.health.getInstance,
@@ -209,6 +219,8 @@ async function importIndex({
   });
 
   mocks.events.registerEventHandlers.mockReset();
+  mocks.moderation.startTempbanScheduler.mockReset();
+  mocks.moderation.stopTempbanScheduler.mockReset();
   mocks.health.getInstance.mockReset().mockReturnValue({});
   mocks.permissions.hasPermission.mockReset().mockReturnValue(true);
   mocks.permissions.getPermissionError.mockReset().mockReturnValue('nope');
@@ -241,9 +253,10 @@ async function importIndex({
 
   const mod = await import('../src/index.js');
   // Pragmatic workaround: settle async microtasks from startup().
-  // The 3 hops (2x Promise.resolve + 1x setImmediate) are coupled to
-  // the current async hop count in startup(). If startup() gains more
-  // awaits, this settling sequence may need to be extended.
+  // The hops are coupled to the current async hop count in startup().
+  // If startup() gains more awaits, this settling sequence may need
+  // to be extended.
+  await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setImmediate(resolve));
