@@ -158,41 +158,43 @@ describe('recordCommunityActivity', () => {
     const baseTime = 1_700_000_000_000;
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(baseTime);
 
-    // Record activity in a channel that will become stale
-    const staleMsg = {
-      guild: { id: 'prune-guild' },
-      channel: { id: 'prune-ch', isTextBased: () => true },
-      author: { bot: false },
-    };
-    recordCommunityActivity(staleMsg, config);
+    try {
+      // Record activity in a channel that will become stale
+      const staleMsg = {
+        guild: { id: 'prune-guild' },
+        channel: { id: 'prune-ch', isTextBased: () => true },
+        author: { bot: false },
+      };
+      recordCommunityActivity(staleMsg, config);
 
-    expect(__getCommunityActivityState('prune-guild')).toEqual({
-      'prune-ch': [baseTime],
-    });
+      expect(__getCommunityActivityState('prune-guild')).toEqual({
+        'prune-ch': [baseTime],
+      });
 
-    // Fast-forward time past the activity window and trigger periodic eviction.
-    // The eviction interval is 50, so we exceed it.
-    nowSpy.mockReturnValue(baseTime + 10 * 60 * 1000);
+      // Fast-forward time past the activity window and trigger periodic eviction.
+      // The eviction interval is 50, so we exceed it.
+      nowSpy.mockReturnValue(baseTime + 10 * 60 * 1000);
 
-    const freshMsg = {
-      guild: { id: 'prune-guild' },
-      channel: { id: 'fresh-ch', isTextBased: () => true },
-      author: { bot: false },
-    };
+      const freshMsg = {
+        guild: { id: 'prune-guild' },
+        channel: { id: 'fresh-ch', isTextBased: () => true },
+        author: { bot: false },
+      };
 
-    for (let i = 0; i < 55; i++) {
-      recordCommunityActivity(freshMsg, config);
+      for (let i = 0; i < 55; i++) {
+        recordCommunityActivity(freshMsg, config);
+      }
+
+      const state = __getCommunityActivityState('prune-guild');
+
+      // Prove stale channel was evicted and only fresh channel timestamps remain.
+      expect(state['prune-ch']).toBeUndefined();
+      expect(state['fresh-ch']).toHaveLength(55);
+      expect(state['fresh-ch']).toEqual(Array(55).fill(baseTime + 10 * 60 * 1000));
+    } finally {
+      vi.restoreAllMocks();
+      __resetCommunityActivityState();
     }
-
-    const state = __getCommunityActivityState('prune-guild');
-
-    // Prove stale channel was evicted and only fresh channel timestamps remain.
-    expect(state['prune-ch']).toBeUndefined();
-    expect(state['fresh-ch']).toHaveLength(55);
-    expect(state['fresh-ch']).toEqual(Array(55).fill(baseTime + 10 * 60 * 1000));
-
-    vi.restoreAllMocks();
-    __resetCommunityActivityState();
   });
 });
 
